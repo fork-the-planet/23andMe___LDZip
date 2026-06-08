@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
     ldzip::Stat min_stat;
     int bits = 8;
     float min = 0.01;
+    size_t chunk_columns = 100;  // v3.0: columns per compressed chunk
     static const std::map<std::string, ldzip::Stat> col_map {
         {"PHASED_R",    ldzip::Stat::PHASED_R},
         {"UNPHASED_R",  ldzip::Stat::UNPHASED_R},
@@ -38,16 +39,18 @@ int main(int argc, char** argv) {
     plink_bin->add_option("-o,--output_prefix", output_prefix, "Output prefix")->required();
     plink_bin->add_option("-b,--bits", bits, "Number of bits to quanitze LD values (99 - float)")->check(CLI::IsMember({8, 16, 32, 99}))->default_val(std::to_string(bits));
     plink_bin->add_option("-m,--min", min, "Minimum absolute threshold")->check(CLI::NonNegativeNumber)->default_val(std::to_string(min));
-    plink_bin->add_option("-t,--type", columns, "Type of LD available in binary matrix. ")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1); 
+    plink_bin->add_option("-t,--type", columns, "Type of LD available in binary matrix. ")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1);
+    plink_bin->add_option("--chunk-columns", chunk_columns, "Number of columns per compression chunk")->check(CLI::PositiveNumber)->default_val(std::to_string(chunk_columns)); 
  
     
     plink_tabular->add_option("-l,--ld_file", ld_file, "Input LD file")->required()->check(CLI::ExistingFile);
     plink_tabular->add_option("-s,--snp_file", snp_file, "SNP list file")->required()->check(CLI::ExistingFile);
     plink_tabular->add_option("-o,--output_prefix", output_prefix, "Output prefix")->required();
     plink_tabular->add_option("-b,--bits", bits, "Bits (8,16,32,99)")->check(CLI::IsMember({8, 16, 32, 99}))->default_val(std::to_string(bits));
-    plink_tabular->add_option("-c,--columns", columns, "LD columns to use from plink tabular file (comma separated)")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->delimiter(','); 
-    plink_tabular->add_option("-k,--min_col", min_col, "LD column to apply minimum absolute thresholding")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1); 
+    plink_tabular->add_option("-c,--columns", columns, "LD columns to use from plink tabular file (comma separated)")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->delimiter(',');
+    plink_tabular->add_option("-k,--min_col", min_col, "LD column to apply minimum absolute thresholding")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1);
     plink_tabular->add_option("-m,--min", min, "Minimum absolute threshold")->check(CLI::NonNegativeNumber)->default_val(std::to_string(min));
+    plink_tabular->add_option("--chunk-columns", chunk_columns, "Number of columns per compression chunk")->check(CLI::PositiveNumber)->default_val(std::to_string(chunk_columns));
 
     // Subcommand: filter
     std::string input_prefix;
@@ -91,13 +94,13 @@ int main(int argc, char** argv) {
         }
 
         if(plink_bin->parsed()){
-            
-            ldzip::compress_binary_matrix(ld_file, snp_file, output_prefix, bits, min, format, stats[0]);
+
+            ldzip::compress_binary_matrix(ld_file, snp_file, output_prefix, bits, min, format, stats[0], chunk_columns);
 
         }else if(plink_tabular->parsed()){
 
-            ldzip::compress_tabular_file(ld_file, snp_file, output_prefix, bits, min, format, min_stat);
-            
+            ldzip::compress_tabular_file(ld_file, snp_file, output_prefix, bits, min, format, min_stat, chunk_columns);
+
         }
     } else if(filter->parsed()) {
         
