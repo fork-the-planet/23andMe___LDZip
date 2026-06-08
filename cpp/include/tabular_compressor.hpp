@@ -13,13 +13,14 @@
 
 namespace ldzip {
     
-void compress_tabular_file(const std::string& in_file, 
+void compress_tabular_file(const std::string& in_file,
                                 const std::string& vars_path,
                                 const std::string& output_prefix,
                                 int bits,
                                 float min,
                                 const std::string& format_str,
-                                Stat& min_stat){
+                                Stat& min_stat,
+                                size_t chunk_size = 0){
         if (bits != 8 && bits != 16 && bits != 32 && bits != 99) {
             throw std::runtime_error("Only bit sizes 8, 16, 32, or 99 are supported.");
         }
@@ -38,7 +39,7 @@ void compress_tabular_file(const std::string& in_file,
         // Initialize the compressor
         std::vector<std::string> fields = snp_util::getFields(in_file, true);
         auto [stats_available, col_to_stat] = snp_util::get_stats_from_fields(fields);
-        LDZipCompressor compressor(N, N, format, stats_available, parse_bits(bits), output_prefix, LDZipCompressor::Mode::ValueStream);
+        LDZipCompressor compressor(N, N, format, stats_available, parse_bits(bits), output_prefix, LDZipCompressor::Mode::ValueStream, chunk_size);
 
 
         // Temporary variables to start reading data
