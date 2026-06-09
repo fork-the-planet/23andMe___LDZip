@@ -167,8 +167,7 @@ process concatChromosome {
     --inputs \$(ls -1 *.i.bin 2>/dev/null \\
               | sed "s/\\.i\\.bin\$//" \\
               | sort -V -u) \\
-    --output_prefix concat_chr${chr} \\
-    --overlapping
+    --output_prefix concat_chr${chr}
     """
 
     stub:
