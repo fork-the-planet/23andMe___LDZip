@@ -6,7 +6,7 @@
     "rows": 4862
   },
   "format": "full",
-  "nnz": 23386302,
+  "nnz": 179308,
   "stats": [
     "PHASED_R",
     "DPRIME"
