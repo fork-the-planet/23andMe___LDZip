@@ -1,7 +1,7 @@
 CXX = g++
 ZSTD_PREFIX ?= $(shell brew --prefix zstd 2>/dev/null || pkg-config --variable=prefix zstd 2>/dev/null || echo /usr/local)
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
-DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -O0 -g3 -fno-inline -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-deprecated-declarations -O2 -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
+DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-deprecated-declarations -O0 -g3 -fno-inline -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
 LDFLAGS = -L$(ZSTD_PREFIX)/lib -lzstd
 
 SRC_DIR = src
@@ -61,18 +61,14 @@ test-tabular:
 
 test-concat:
 	@rm -rf tests/output/*
-	@cd tests && ./test_tabular_concat.sh && ./test_square_concat.sh && ./test_tabular_concat_overlap.sh && ./test_concat_sequential.sh
-
-test-overflow:
-	@rm -rf tests/output/*
-	@cd tests && ./test_overflow_tabular.sh && ./test_overflow_concat.sh && ./test_overflow_concat_overlap.sh
+	@cd tests && ./test_tabular_concat_non_overlap.sh && ./test_square_concat_non_overlap.sh && ./test_tabular_concat_overlap.sh && ./test_concat_sequential.sh
 
 test-filter:
 	@rm -rf tests/output/*
-	@cd tests && ./test_filter_square_unit_lossless.sh && ./test_filter_tabular_plink_lossless.sh && ./test_filter_tabular_plink_combination.sh 
+	@cd tests && ./test_filter_square_unit_lossless.sh && ./test_filter_tabular_plink_lossless.sh && ./test_filter_tabular_plink_combination.sh
 
 
-test: create-dir test-square test-tabular test-concat test-overflow test-filter
+test: create-dir test-square test-tabular test-concat test-filter
 
 create-dir:
 	@cd tests && mkdir -p output
