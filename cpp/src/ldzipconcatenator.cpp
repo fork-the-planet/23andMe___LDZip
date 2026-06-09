@@ -498,7 +498,7 @@ void LDZipConcatenator::concat_naive(const std::vector<std::string>& prefixes, c
 
     OverlapVariantInfo ov = read_overlapping_variant_order(var_files, false);
     for (size_t i = 0; i < ov.chunks.size(); i++) {
-        if (ov.chunks[i].first_overlap_end != ov.chunks[i].second_overlap_start)
+        if (ov.chunks[i].first_overlap_end > 0 || ov.chunks[i].second_overlap_start < ov.chunks[i].n_variants)
             throw std::runtime_error("Naive concat detected overlap in chunk " + std::to_string(i) + ". Use default mode (without --naive)");
     }
     size_t total_variants = ov.total_variants;
