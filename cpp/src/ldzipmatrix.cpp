@@ -179,14 +179,14 @@ std::vector<uint32_t> LDZipMatrix::get_i(uint32_t column) const {
     if (version_ == "3.0" && chunk_size_ > 0) {
         // v3.0: Read from compressed chunks (int32_t deltas)
 
-        // 1. Determine which chunk contains this column
-        size_t chunk_id = column / chunk_size_;
+        // 1. Determine which chunk contains this column (using index, ignoring metadata chunk_size)
+        size_t chunk_id = i_chunked_reader_->getChunkForColumn(column);
 
         // 2. Read and decompress the entire chunk (cached by ChunkedReader)
         const std::vector<uint8_t>& chunk_data = i_chunked_reader_->readChunk(chunk_id);
 
         // 3. Calculate byte offset of this column within decompressed chunk
-        uint64_t chunk_start_col = chunk_id * chunk_size_;
+        uint64_t chunk_start_col = i_chunked_reader_->getChunkStartColumn(chunk_id);
         uint64_t chunk_start_offset = get_p(chunk_start_col);
         uint64_t column_offset_in_chunk = start - chunk_start_offset;
 
@@ -274,7 +274,7 @@ std::vector<float> LDZipMatrix::get_x(uint32_t column, Stat stat) const {
 
     // v3.0: Read from chunked compressed file
     if (version_ == "3.0" && chunk_size_ > 0) {
-        size_t chunk_id = column / chunk_size_;
+        size_t chunk_id = x_chunked_readers_[stat]->getChunkForColumn(column);
         const auto& chunk_data = x_chunked_readers_[stat]->readChunk(chunk_id);
 
         size_t bytes_per_val;
@@ -290,8 +290,9 @@ std::vector<float> LDZipMatrix::get_x(uint32_t column, Stat stat) const {
         }
 
         // Calculate offset within the chunk
+        size_t chunk_start_col = x_chunked_readers_[stat]->getChunkStartColumn(chunk_id);
         size_t byte_offset = 0;
-        for (size_t c = chunk_id * chunk_size_; c < column; c++) {
+        for (size_t c = chunk_start_col; c < column; c++) {
             uint64_t col_nnz = p[c + 1] - p[c];
             byte_offset += col_nnz * bytes_per_val;
         }
