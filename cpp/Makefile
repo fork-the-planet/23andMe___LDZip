@@ -1,6 +1,8 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude -Iexternal
-DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -O0 -g3 -fno-inline -Iinclude -Iexternal
+ZSTD_PREFIX ?= $(shell brew --prefix zstd 2>/dev/null || pkg-config --variable=prefix zstd 2>/dev/null || echo /usr/local)
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
+DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -O0 -g3 -fno-inline -Iinclude -Iexternal -I$(ZSTD_PREFIX)/include
+LDFLAGS = -L$(ZSTD_PREFIX)/lib -lzstd
 
 SRC_DIR = src
 OBJ_DIR = obj
@@ -23,7 +25,7 @@ build: $(BIN)
 
 $(BIN): $(OBJECTS)
 	@mkdir -p bin
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
@@ -34,7 +36,7 @@ debug: $(DEBUG_BIN)
 
 $(DEBUG_BIN): $(DEBUG_OBJECTS)
 	@mkdir -p bin
-	$(CXX) $(DEBUG_CXXFLAGS) -o $@ $^
+	$(CXX) $(DEBUG_CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(DEBUG_OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(DEBUG_OBJ_DIR)
