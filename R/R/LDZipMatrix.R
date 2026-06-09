@@ -17,10 +17,9 @@
 #' files on disk that together encode the matrix in \emph{Compressed Sparse Column (CSC)}
 #' format. This format stores, for each column, a pointer to its nonzero entries
 #' (\code{.p.bin}), the corresponding row indices (\code{.i.bin}), and one or more
-#' compressed value streams (\code{.x.<stats>.bin}). In fact, it stores only the
-#' delta encoded values of row indices in (\code{.i.bin}) so that they fit within
-#' a 16 bit integer, and stores the few overflowing delta values in (\code{.io.bin})
-#' with corresponding column boundaries in (\code{.io.index}) 
+#' compressed value streams (\code{.x.<stats>.bin}). The row indices are delta encoded
+#' and compressed in chunks using zstd compression (\code{.i.bin}), with chunk boundaries
+#' indexed in (\code{.i.bin.index}) for efficient random access 
 #'
 #' Each \code{.x.<stats>.bin} file corresponds to a particular LD statistic
 #' (e.g., \code{PHASED_R}, \code{UNPHASED_R2}, \code{D}, \code{DPRIME}). Multiple
@@ -35,12 +34,12 @@
 #' @note
 #' A valid LDZipMatrix requires several files with the same \code{prefix}:
 #' \itemize{
-#'   \item \code{<prefix>.i.bin} – row indices for nonzero entries delta encoded
-#'   \item \code{<prefix>.io.bin} – overflowing row indices for nonzero entries
-#'   \item \code{<prefix>.io.index} – column boundaries for overflow entries
+#'   \item \code{<prefix>.i.bin} – delta-encoded row indices for nonzero entries, chunked and compressed with zstd
+#'   \item \code{<prefix>.i.bin.index} – chunk boundaries for efficient random access to row indices
 #'   \item \code{<prefix>.p.bin} – column pointers marking the start of each column in \code{i} and \code{x}
-#'   \item \code{<prefix>.x.<stats>.bin} – compressed numeric values for a given LD statistic
-#'   \item \code{<prefix>.meta.json} – json file describing associated metadata
+#'   \item \code{<prefix>.x.<stats>.bin} – compressed numeric values for a given LD statistic, chunked and compressed with zstd
+#'   \item \code{<prefix>.x.<stats>.bin.index} – chunk boundaries for efficient random access to each statistic
+#'   \item \code{<prefix>.meta.json} – json file describing associated metadata (version, chunk_size, stats, etc.)
 #'   \item \code{<prefix>.vars.txt} – variant identifiers
 #'   \item (optionally) \code{<prefix>.sqlite} – SQLite database with indexed variant information
 #' }
