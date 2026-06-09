@@ -180,8 +180,17 @@ void LDZipCompressor::writeActiveColumn(){
 
 void LDZipCompressor::write_i() {
     std::vector<uint32_t>& i_col = m_.i_[active_column_];
-    if (!i_col.empty())
-        i_chunked_writer_->appendColumn(i_col.data(), i_col.size() * sizeof(uint32_t));
+
+    if (!i_col.empty()) {
+        // v3.0: Encode as int32_t deltas (first element from diagonal, rest as successive differences)
+        std::vector<int32_t> deltas(i_col.size());
+        deltas[0] = static_cast<int32_t>(i_col[0]) - static_cast<int32_t>(active_column_);
+        for (size_t idx = 1; idx < i_col.size(); ++idx) {
+            deltas[idx] = static_cast<int32_t>(i_col[idx]) - static_cast<int32_t>(i_col[idx - 1]);
+        }
+        i_chunked_writer_->appendColumn(deltas.data(), deltas.size() * sizeof(int32_t));
+    }
+
     i_col.clear();
     i_col.shrink_to_fit();
 }

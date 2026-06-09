@@ -177,7 +177,7 @@ std::vector<uint32_t> LDZipMatrix::get_i(uint32_t column) const {
     if (nnz_column == 0) return i_buf;
 
     if (version_ == "3.0" && chunk_size_ > 0) {
-        // v3.0: Read from compressed chunks (raw uint32_t, no delta encoding)
+        // v3.0: Read from compressed chunks (int32_t deltas)
 
         // 1. Determine which chunk contains this column
         size_t chunk_id = column / chunk_size_;
@@ -186,15 +186,19 @@ std::vector<uint32_t> LDZipMatrix::get_i(uint32_t column) const {
         const std::vector<uint8_t>& chunk_data = i_chunked_reader_->readChunk(chunk_id);
 
         // 3. Calculate byte offset of this column within decompressed chunk
-        //    p_ stores cumulative counts across all columns, so we need chunk's start
         uint64_t chunk_start_col = chunk_id * chunk_size_;
         uint64_t chunk_start_offset = get_p(chunk_start_col);
         uint64_t column_offset_in_chunk = start - chunk_start_offset;
 
-        // 4. Copy this column's indices from decompressed buffer
-        const uint32_t* data_ptr = reinterpret_cast<const uint32_t*>(chunk_data.data() + column_offset_in_chunk * sizeof(uint32_t));
+        // 4. Decode deltas from decompressed buffer
+        const int32_t* deltas = reinterpret_cast<const int32_t*>(chunk_data.data() + column_offset_in_chunk * sizeof(int32_t));
 
-        std::copy(data_ptr, data_ptr + nnz_column, i_buf.begin());
+        // First element is delta from diagonal
+        i_buf[0] = column + deltas[0];
+        // Subsequent elements are successive differences
+        for (size_t idx = 1; idx < nnz_column; ++idx) {
+            i_buf[idx] = i_buf[idx - 1] + deltas[idx];
+        }
 
     } else if (version_ == "1.1") {
         // v1.1: Raw uint32_t indices
