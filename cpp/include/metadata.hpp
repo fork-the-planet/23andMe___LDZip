@@ -150,11 +150,12 @@ namespace ldzip {
         MatrixFormat format = MatrixFormat::UPPER;
         EnumArray<bool, Stat> has_stat{};
         std::string version = "";
+        size_t chunk_size = 0;
 
         MetaInfo() = default;
 
-        MetaInfo(size_t r, size_t c, uint64_t n, int bit_val, MatrixFormat fmt, std::string ver)
-            : rows(r), cols(c), nnz(n), bits(parse_bits(bit_val)), format(fmt), version(ver) {}
+        MetaInfo(size_t r, size_t c, uint64_t n, int bit_val, MatrixFormat fmt, std::string ver, size_t cs = 0)
+            : rows(r), cols(c), nnz(n), bits(parse_bits(bit_val)), format(fmt), version(ver), chunk_size(cs) {}
     };
 
     inline void write_metadata_json(const std::string& path, const MetaInfo& meta) {
@@ -177,6 +178,7 @@ namespace ldzip {
             }
         }
         j["stats"] = stats_json;
+        j["chunk_size"] = meta.chunk_size;
 
         out << j.dump(2) << std::endl;  // pretty print with 2-space indent
     }
@@ -202,6 +204,15 @@ namespace ldzip {
             Stat s = parse_stat(stat_str.get<std::string>());
             meta.has_stat[s] = true;
         }
+
+        // v3.0: chunk_size is required
+        if (meta.version == "3.0") {
+            if (!j.contains("chunk_size")) {
+                throw std::runtime_error("v3.0 file missing required 'chunk_size' field in metadata");
+            }
+            meta.chunk_size = j["chunk_size"].get<size_t>();
+        }
+
         return meta;
     }
 
