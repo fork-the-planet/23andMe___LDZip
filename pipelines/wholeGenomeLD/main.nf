@@ -88,7 +88,7 @@ process ldPlink {
     def chunk_filter = (end_bp > 0) ? "--chr ${chr} --from-bp ${start_bp} --to-bp ${end_bp}" : "--chr ${chr}"
     """
     ${PLINK2} \\
-        --pfile ${pfile_base} ${subset_snps} ${exclude_snps} ${chunk_filter} \\
+        --pfile ${pfile_base} ${subset_snps} ${exclude_snps} ${chunk_filter} --force-intersect \\
         --rm-dup exclude-all \\
         --make-just-pvar \\
         --threads ${params.ld_threads} \\
