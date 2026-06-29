@@ -7,13 +7,16 @@ LDFLAGS = -L$(ZSTD_PREFIX)/lib -lzstd
 SRC_DIR = src
 OBJ_DIR = obj
 DEBUG_OBJ_DIR = obj_debug
+DEV_OBJ_DIR = obj_dev
 BIN = bin/ldzip
 DEBUG_BIN = bin/ldzip_debug
-.PHONY: build debug clean test
+DEV_BIN = bin/ldzip-dev
+.PHONY: build debug dev clean test
 
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SOURCES))
 DEBUG_OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(DEBUG_OBJ_DIR)/%.o,$(SOURCES))
+DEV_OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(DEV_OBJ_DIR)/%.o,$(SOURCES))
 
 build: $(BIN)
 	@echo "✅ Build complete."
@@ -42,8 +45,20 @@ $(DEBUG_OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(DEBUG_OBJ_DIR)
 	$(CXX) $(DEBUG_CXXFLAGS) -c $< -o $@
 
+dev: $(DEV_BIN)
+	@echo "✅ Development build complete: $(DEV_BIN)"
+	@echo "👉 Use './$(DEV_BIN)' for testing new features"
+
+$(DEV_BIN): $(DEV_OBJECTS)
+	@mkdir -p bin
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(DEV_OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(DEV_OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 clean:
-	rm -rf $(OBJ_DIR) $(DEBUG_OBJ_DIR) bin/
+	rm -rf $(OBJ_DIR) $(DEBUG_OBJ_DIR) $(DEV_OBJ_DIR) bin/
 
 quick-test: create-dir test-fast
 
