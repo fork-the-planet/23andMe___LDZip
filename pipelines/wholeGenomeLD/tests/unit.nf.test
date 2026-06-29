@@ -49,4 +49,19 @@ nextflow_pipeline {
 
     }
 
+    test("Unit Test NPZ - Should run without failures") {
+
+        when {
+            params {
+                load("$projectDir/tests/yaml/unit.npz.yaml")
+                outdir = "$projectDir/.nf-test"
+            }
+        }
+
+        then {
+            assert workflow.success
+        }
+
+    }
+
 }
