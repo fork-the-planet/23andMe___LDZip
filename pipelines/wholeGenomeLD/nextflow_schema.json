@@ -97,6 +97,10 @@
                     "default": "--r-phased ref-based cols=id,ref,alt,dprime",
                     "description": "string to be passed to plink2 for LD calculation. All LD statistics output by plink2 will be compressed"
                 },
+                "ld_filter": {
+                    "type": "string",
+                    "description": "variant filtering options to apply before LD calculation (e.g., '--maf 0.0001' for minor allele frequency filtering, '--geno 0.1' for missingness, etc.)"
+                },
                 "ld_threads": {
                     "type": "integer",
                     "default": 4,

@@ -84,11 +84,12 @@ process ldPlink {
     def subset_snps = params.extract ? "--extract ${params.extract}" : ""
     def exclude_snps = params.exclude ? "--exclude ${params.exclude}" : ""
     def subset_samples = params.keep ? "--keep ${params.keep}" : ""
+    def ld_filter = params.ld_filter ? "${params.ld_filter}" : ""
     def plink_ld_command = params.ld_command ? "${params.ld_command}" : "--r-phased ref-based cols=id,ref,alt,dprime"
     def chunk_filter = (end_bp > 0) ? "--chr ${chr} --from-bp ${start_bp} --to-bp ${end_bp}" : "--chr ${chr}"
     """
     ${PLINK2} \\
-        --pfile ${pfile_base} ${subset_snps} ${exclude_snps} ${chunk_filter} --force-intersect \\
+        --pfile ${pfile_base} ${subset_snps} ${exclude_snps} ${chunk_filter} ${ld_filter} --force-intersect \\
         --rm-dup exclude-all \\
         --make-just-pvar \\
         --threads ${params.ld_threads} \\
