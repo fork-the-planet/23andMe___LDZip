@@ -94,7 +94,7 @@
             "properties": {
                 "ld_command": {
                     "type": "string",
-                    "default": "--r-phased ref-based cols=id,ref,alt,dprime",
+                    "default": "--r-unphased ref-based cols=id,ref,alt",
                     "description": "string to be passed to plink2 for LD calculation. All LD statistics output by plink2 will be compressed"
                 },
                 "ld_filter": {
@@ -146,12 +146,13 @@
                 },
                 "min_col": {
                     "type": "string",
-                    "default": "PHASED_R",
-                    "description": "column/type on which to apply the min threshold"
+                    "default": "UNPHASED_R",
+                    "enum": ["PHASED_R", "UNPHASED_R", "UNPHASED_R2", "DPRIME"],
+                    "description": "column (LD statistic type) on which to apply the min threshold (only applicable when using pfile_template/vcf_template)"
                 },
                 "npz_ld_type": {
                     "type": "string",
-                    "default": "PHASED_R",
+                    "default": "UNPHASED_R",
                     "enum": ["PHASED_R", "UNPHASED_R", "UNPHASED_R2", "DPRIME"],
                     "description": "LD statistic type to compress from NPZ files (only applicable when using npz_template)"
                 },
