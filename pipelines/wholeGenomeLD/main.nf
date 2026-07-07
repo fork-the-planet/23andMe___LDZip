@@ -248,13 +248,12 @@ process concatGenome {
         path(".command.log"),           emit: log
 
     script:
+    def chrom_order = params.chroms.tokenize(',')*.trim().collect { "concat_chr${it}" }.join(' ')
     """
     ${LDZIP} concat \\
-    --inputs \$(ls -1 *.i.bin 2>/dev/null \\
-              | sed "s/\\.i\\.bin\$//" \\
-              | sort -V -u) \\
-    --naive \\
-    --output_prefix concat
+        --inputs ${chrom_order} \\
+        --naive \\
+        --output_prefix concat
     """
     stub:
     """
