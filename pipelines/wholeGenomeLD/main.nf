@@ -159,7 +159,7 @@ process convertNpzToBinary {
     publishDir "${params.outdir}/plinkLD/", mode: 'link', overwrite: true, pattern: "plink.chr${chr}_${chunk_id}.*", enabled: params.stage_binary
 
     input:
-        tuple val(chr), val(chunk_id), path(npz_file), path(gz_file)
+        tuple val(chr), val(chunk_id), val(npz_file), val(gz_file)
 
     output:
         tuple val(chr), val(chunk_id), path("chr${chr}_${chunk_id}.bin"), path("chr${chr}_${chunk_id}.bin.vars"), emit: binary
@@ -168,8 +168,8 @@ process convertNpzToBinary {
     script:
     """
     python3 ${projectDir}/../../scripts/npz_to_binary_matrix.py \\
-        ${npz_file} \\
-        ${gz_file} \\
+        "${npz_file}" \\
+        "${gz_file}" \\
         chr${chr}_${chunk_id}.bin
     """
 
@@ -319,17 +319,17 @@ workflow {
     // Branch based on input type
     if (params.npz_template) {
         // NPZ workflow: use template with {CHR} and {CHUNK} placeholders
-        // Find all NPZ files by globbing the template pattern
         def npz_glob = params.npz_template.replace('{CHR}', '*').replace('{CHUNK}', '*')
+        def use_s3 = params.npz_template.startsWith('s3://')
 
         // Create regex pattern from template for parsing
-        // TODO: generalize this to work with any template format
-        def template_basename = new File(params.npz_template).name.replaceAll(/\.npz$/, '')
+        def template_basename = npz_glob.tokenize('/').last().replaceAll(/\.npz$/, '')
         def template_pattern = template_basename
             .replaceAll(/\{CHR\}/, '([^_]+)')
             .replaceAll(/\{CHUNK\}/, '(.+)')
+            .replaceAll(/\*/, '([^/]+)')
 
-        npz_files = Channel.fromPath(npz_glob, followLinks: true, type: 'file', checkIfExists: true)
+        npz_files = Channel.fromPath(npz_glob, followLinks: true, type: use_s3 ? 'any' : 'file')
             .map { npz_file ->
                 // Extract chr and chunk from filename using template pattern
                 def basename = npz_file.name.replaceAll(/\.npz$/, '')
@@ -346,8 +346,15 @@ workflow {
                 def start_pos_match = chunk_str =~ /^(\d+)/
                 def sort_key = start_pos_match ? start_pos_match.group(1).toLong() : chunk_str
 
-                def gz_file = file(npz_file.toString().replace('.npz', '.gz'))
-                return tuple(chr, sort_key, chunk_str, npz_file, gz_file)
+                // For S3, pass URLs as strings; for local, pass as file objects
+                if (use_s3) {
+                    def npz_url = npz_file.toString()
+                    def gz_url = npz_url.replace('.npz', '.gz')
+                    return tuple(chr, sort_key, chunk_str, npz_url, gz_url)
+                } else {
+                    def gz_file = file(npz_file.toString().replace('.npz', '.gz'))
+                    return tuple(chr, sort_key, chunk_str, npz_file, gz_file)
+                }
             }
             .filter { it != null && it[0] in CHROMS }
             .groupTuple(by: 0)  // Group by chromosome
