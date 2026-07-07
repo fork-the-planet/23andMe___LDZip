@@ -6,14 +6,12 @@ IMPORTANT: This script is designed specifically for Alkes Price lab NPZ file for
 (sparse COO with 'row', 'col', 'data', 'shape' keys). It may not work with other
 NPZ formats without modification.
 
-Supports both local files and S3 streaming (s3:// URLs).
-
 Usage:
     python npz_to_binary_matrix.py input.npz variants.gz output.bin
 
 Arguments:
-    input.npz    : Input NPZ file (local path or s3:// URL)
-    variants.gz  : Variant list file (local path or s3:// URL)
+    input.npz    : Input NPZ file containing sparse LD matrix (Alkes Price format)
+    variants.gz  : Variant list file (rsid, chrom, pos, ref, alt)
     output.bin   : Output binary matrix file
 """
 
@@ -24,76 +22,29 @@ import time
 import numpy as np
 from scipy.sparse import coo_matrix
 
-# S3 support (optional dependencies)
-try:
-    import s3fs
-    HAS_S3 = True
-except ImportError:
-    HAS_S3 = False
-
-def is_s3_path(path):
-    """Check if path is an S3 URL"""
-    return isinstance(path, str) and path.startswith('s3://')
-
-def load_npz_from_s3(s3_path):
-    """Load NPZ file directly from S3 without downloading"""
-    if not HAS_S3:
-        raise ImportError("s3fs required for S3 support. Install with: pip install s3fs")
-
-    print(f"  Streaming from S3...", flush=True)
-    s3 = s3fs.S3FileSystem(anon=True)
-
-    with s3.open(s3_path, 'rb') as f:
-        data = np.load(f)
-        # Load arrays into memory immediately (file handle will close)
-        result = {
-            'row': data['row'][:],
-            'col': data['col'][:],
-            'data': data['data'][:],
-            'shape': data['shape'][:]
-        }
-    return result
-
-def read_variants_gzip(file_handle):
-    """Read variants from gzip file handle"""
-    variants = []
-    with gzip.open(file_handle, 'rt') as gz:
-        gz.readline()  # Skip header
-        for line in gz:
-            parts = line.strip().split('\t')
-            if len(parts) >= 5:
-                rsid, chrom, pos, a1, a2 = parts[:5]
-                variants.append((chrom, pos, a1, a2, rsid))
-    return variants
-
 def create_vars_file(variants_path, output_path, num_variants, keep_indices=None):
     """
     Create a .vars file from the variant list (PLINK format).
     Appends :REF:ALT to duplicate RSIDs (multi-allelic variants) to make them unique.
 
     Args:
-        variants_path: Path to .gz file with variant info (local or s3://)
+        variants_path: Path to .gz file with variant info
         output_path: Path to output .vars file
         num_variants: Expected number of variants
         keep_indices: Optional list of indices to keep (after duplicate removal)
     """
-    print(f"Creating .vars file from {os.path.basename(variants_path) if not is_s3_path(variants_path) else variants_path}...", flush=True)
+    print(f"Creating .vars file from {os.path.basename(variants_path)}...", flush=True)
 
-    if is_s3_path(variants_path):
-        if not HAS_S3:
-            raise ImportError("s3fs required for S3 support")
-        s3 = s3fs.S3FileSystem(anon=True)
-        with s3.open(variants_path, 'rb') as f:
-            variants = read_variants_gzip(f)
-    else:
-        with gzip.open(variants_path, 'rt') as f:
-            f.readline()  # Skip header
-            variants = []
-            for line in f:
-                parts = line.strip().split('\t')
-                if len(parts) >= 5:
-                    rsid, chrom, pos, a1, a2 = parts[:5]
-                    variants.append((rsid, chrom, pos, a1, a2))
+    with gzip.open(variants_path, 'rt') as f:
+        # Skip header
+        f.readline()
+
+        variants = []
+        for line in f:
+            parts = line.strip().split('\t')
+            if len(parts) >= 5:
+                rsid, chrom, pos, a1, a2 = parts[:5]
+                variants.append((rsid, chrom, pos, a1, a2))
 
     if len(variants) != num_variants:
         print(f"  WARNING: variants in .gz ({len(variants)}) != matrix dim ({num_variants})", flush=True)
@@ -129,30 +80,22 @@ def convert_npz_to_binary(npz_path, output_path, variants_path=None):
     """
     Load sparse .npz LD matrix and save as dense binary float32.
     Removes exact duplicate variants (same chr:pos:ref:alt) and corresponding matrix rows/cols.
-    Supports both local files and S3 streaming.
 
     Args:
-        npz_path: Path to input .npz file (local or s3://)
+        npz_path: Path to input .npz file (COO sparse format)
         output_path: Path to output binary file
-        variants_path: Path to .gz file with variant info (local or s3://)
+        variants_path: Path to .gz file with variant info
     """
     start_time = time.time()
 
     # Load sparse matrix data
     print(f"[1/5] Loading {npz_path}...", flush=True)
+    data = np.load(npz_path)
 
-    if is_s3_path(npz_path):
-        data = load_npz_from_s3(npz_path)
-        row = data['row']
-        col = data['col']
-        values = data['data']
-        shape = tuple(data['shape'])
-    else:
-        data = np.load(npz_path)
-        row = data['row']
-        col = data['col']
-        values = data['data']
-        shape = tuple(data['shape'])
+    row = data['row']
+    col = data['col']
+    values = data['data']
+    shape = tuple(data['shape'])
 
     print(f"  {shape[0]} x {shape[1]} matrix, {len(values):,} non-zero entries ({time.time()-start_time:.1f}s)", flush=True)
 
@@ -162,21 +105,14 @@ def convert_npz_to_binary(npz_path, output_path, variants_path=None):
         print(f"[2/5] Detecting exact duplicate variants and boundary variants...", flush=True)
         step_time = time.time()
 
-        if is_s3_path(variants_path):
-            if not HAS_S3:
-                raise ImportError("s3fs required for S3 support")
-            s3 = s3fs.S3FileSystem(anon=True)
-            with s3.open(variants_path, 'rb') as f:
-                variants = read_variants_gzip(f)
-        else:
-            with gzip.open(variants_path, 'rt') as f:
-                f.readline()  # Skip header
-                variants = []
-                for line in f:
-                    parts = line.strip().split('\t')
-                    if len(parts) >= 5:
-                        rsid, chrom, pos, a1, a2 = parts[:5]
-                        variants.append((chrom, pos, a1, a2, rsid))
+        with gzip.open(variants_path, 'rt') as f:
+            f.readline()  # Skip header
+            variants = []
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 5:
+                    rsid, chrom, pos, a1, a2 = parts[:5]
+                    variants.append((chrom, pos, a1, a2, rsid))
 
         # Check if first variant is at a boundary position (ends with 00001)
         skip_first = False
