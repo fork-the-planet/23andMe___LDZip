@@ -164,14 +164,17 @@ uint64_t LDZipConcatenator::get_p_value(uint32_t col) const {
 }
 
 void LDZipConcatenator::close() {
-    for (Stat s : overlap_merger_.m_.stats_available_)
-        overlap_merger_.x_streams_[s].close();
+    // Close all chunked writers (flush buffered data to disk)
     overlap_merger_.i_chunked_writer_->close();
+    for (Stat s : overlap_merger_.m_.stats_available_) {
+        overlap_merger_.x_chunked_writers_[s]->close();
+    }
     overlap_merger_.p_stream_.close();
 
     // Set total nnz from tracked value
     overlap_merger_.m_.set_nnz(current_nnz_);
 
+    // Write metadata after all data files are closed
     MetaInfo meta = overlap_merger_.m_.metaInfo();
     meta.chunk_size = overlap_merger_.chunk_size_;
     write_metadata_json(overlap_merger_.m_.metaFile(), meta);
