@@ -31,7 +31,7 @@ void concat_ldzip(const std::vector<std::string> &prefixes,
 
     // Default mode: decompress, merge overlaps, recompress (supports all versions)
     // Build variant boundary information and detect overlaps
-    OverlapVariantInfo ov = read_overlapping_variant_order(var_files, true);
+    OverlapVariantInfo ov = read_overlapping_variant_order(var_files);
 
     size_t total_rows = ov.total_variants;
 

@@ -365,7 +365,7 @@ bool read_next_variant_id(std::ifstream& in, std::string& id) {
 }
 } // anonymous namespace
 
-OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files, bool /* check_overlap */) {
+OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files) {
     if (var_files.empty()) throw std::runtime_error("No variant files provided");
 
     size_t n = var_files.size();
@@ -499,7 +499,7 @@ void LDZipConcatenator::concat_naive(const std::vector<std::string>& prefixes, c
     std::vector<std::string> var_files;
     for (const auto& pref : prefixes) var_files.push_back(pref + ".vars.txt");
 
-    OverlapVariantInfo ov = read_overlapping_variant_order(var_files, false);
+    OverlapVariantInfo ov = read_overlapping_variant_order(var_files);
     for (size_t i = 0; i < ov.chunks.size(); i++) {
         if (ov.chunks[i].first_overlap_end > 0 || ov.chunks[i].second_overlap_start < ov.chunks[i].n_variants)
             throw std::runtime_error("Naive concat detected overlap in chunk " + std::to_string(i) + ". Use default mode (without --naive)");

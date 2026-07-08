@@ -23,7 +23,7 @@ struct OverlapVariantInfo {
 
 // Builds variant boundary information for concatenation
 // Reads variant files and validates overlaps match exactly
-OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files, bool check_overlap);
+OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files);
 
 class LDZipConcatenator {
 public:
