@@ -2,6 +2,8 @@
 
 This tutorial walks through generating whole-genome linkage disequilibrium (LD) matrices from 1000 Genomes Project (1000G) data using the Nextflow pipeline provided in this repository. The same workflow can be applied to other large-scale datasets such as UK Biobank or TOPMed.
 
+**See also:** [UK Biobank tutorial](ukbb-tutorial.md) for generating LD matrices from pre-computed NPZ files.
+
 ## Overview
 
 The workflow consists of two main steps:
