@@ -492,6 +492,11 @@ OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>
 void LDZipConcatenator::concat_naive(const std::vector<std::string>& prefixes, const std::string& out_prefix) {
     if (prefixes.empty()) throw std::runtime_error("No input chunks provided");
 
+    // Validate all input files exist using LDZipMatrix constructor (throws if missing)
+    for (const auto& prefix : prefixes) {
+        LDZipMatrix mat(prefix);
+    }
+
     std::vector<MetaInfo> metas = validate_and_load_metadata(prefixes);
 
     // Check for overlaps using existing function
