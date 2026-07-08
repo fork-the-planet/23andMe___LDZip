@@ -176,7 +176,6 @@ void LDZipConcatenator::close() {
 
     // Write metadata after all data files are closed
     MetaInfo meta = overlap_merger_.m_.metaInfo();
-    meta.chunk_size = overlap_merger_.chunk_size_;
     write_metadata_json(overlap_merger_.m_.metaFile(), meta);
 }
 
