@@ -290,12 +290,10 @@ std::vector<float> LDZipMatrix::get_x(uint32_t column, Stat stat) const {
         }
 
         // Calculate offset within the chunk
-        size_t chunk_start_col = x_chunked_readers_[stat]->getChunkStartColumn(chunk_id);
-        size_t byte_offset = 0;
-        for (size_t c = chunk_start_col; c < column; c++) {
-            uint64_t col_nnz = p[c + 1] - p[c];
-            byte_offset += col_nnz * bytes_per_val;
-        }
+        uint64_t chunk_start_col = x_chunked_readers_[stat]->getChunkStartColumn(chunk_id);
+        uint64_t chunk_start_offset = p[chunk_start_col];
+        uint64_t column_offset_in_chunk = p[column] - chunk_start_offset;
+        size_t byte_offset = column_offset_in_chunk * bytes_per_val;
 
         // Decode from chunk data
         if (bits_ == Bits::B99) {
