@@ -147,13 +147,13 @@
                 "min_col": {
                     "type": "string",
                     "default": "UNPHASED_R",
-                    "enum": ["PHASED_R", "UNPHASED_R", "UNPHASED_R2", "DPRIME"],
+                    "enum": ["PHASED_R", "UNPHASED_R", "PHASED_R2", "UNPHASED_R2", "D", "DPRIME"],
                     "description": "column (LD statistic type) on which to apply the min threshold (only applicable when using pfile_template/vcf_template)"
                 },
                 "npz_ld_type": {
                     "type": "string",
                     "default": "UNPHASED_R",
-                    "enum": ["PHASED_R", "UNPHASED_R", "UNPHASED_R2", "DPRIME"],
+                    "enum": ["PHASED_R", "UNPHASED_R", "PHASED_R2", "UNPHASED_R2", "D", "DPRIME"],
                     "description": "LD statistic type to compress from NPZ files (only applicable when using npz_template)"
                 },
                 "concat_pairwise": {
