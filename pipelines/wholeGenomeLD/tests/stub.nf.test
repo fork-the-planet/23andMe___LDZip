@@ -25,7 +25,7 @@ nextflow_pipeline {
         when {
             params {
                 load("$projectDir/tests/yaml/stub.npz.yaml")
-                outdir = "$projectDir/.nf-test-npz"
+                outdir = "$projectDir/.nf-test"
             }
         }
 
