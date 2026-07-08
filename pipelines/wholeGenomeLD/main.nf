@@ -37,6 +37,7 @@ process getChromosomeBounds {
 
 process vcfToPgen {
     tag { "chr${chr}" }
+    cpus { params.ld_threads }
     memory { 8.GB * task.attempt }
     publishDir "${params.outdir}/logs/${task.process}/", mode: 'copy', pattern: ".command.log", overwrite: true, saveAs: {"${task.tag}.log"}
     publishDir "${params.outdir}/pgen/", mode: 'link', overwrite: true, pattern: "converted.chr${chr}.*", enabled: params.stage_pgen
@@ -68,6 +69,7 @@ process vcfToPgen {
 
 process ldPlink {
     tag { "chr${chr}-chunk${chunk_id}" }
+    cpus { params.ld_threads }
     memory { 8.GB * task.attempt }
     publishDir "${params.outdir}/logs/${task.process}/", mode: 'copy', pattern: ".command.log", overwrite: true, saveAs: {"${task.tag}.log"}
     publishDir "${params.outdir}/plinkLD/", mode: 'link', overwrite: true, pattern: "plink.chr${chr}_${chunk_id}.*", enabled: params.stage_plink
