@@ -180,6 +180,7 @@
 #'
 #' # Pairwise with multiple statistics (returns data.frame with multiple columns)
 #' fetchLD(ld, rows, cols, types = c("PHASED_R", "DPRIME"), pairwise = TRUE)
+#' }
 #'
 #' @export
 fetchLD <- function(ld, row, col, types=c("UNPHASED_R"), pairwise=FALSE, simplify=TRUE) {
