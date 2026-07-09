@@ -23,12 +23,12 @@ for (bits in bits_list) {
 
     # Test region queries with and without "chr" prefix
     rsids_expected <- paste0("rs", 1:100)
-    val_rsid <- fetchLD(ld, rsids_expected, rsids_expected, type="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_rsid <- fetchLD(ld, rsids_expected, rsids_expected, types="UNPHASED_R", simplify=F)$UNPHASED_R
     val_orig <- orig[rsids_expected, rsids_expected]
 
     # Test without "chr" prefix
     region_no_chr <- "2:10000-10099"
-    val_region_no_chr <- fetchLD(ld, region_no_chr, region_no_chr, type="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_region_no_chr <- fetchLD(ld, region_no_chr, region_no_chr, types="UNPHASED_R", simplify=F)$UNPHASED_R
 
     expect_equal(
         as.vector(val_region_no_chr),
@@ -48,7 +48,7 @@ for (bits in bits_list) {
 
     # Test with "chr" prefix
     region_with_chr <- "chr2:10000-10099"
-    val_region_with_chr <- fetchLD(ld, region_with_chr, region_with_chr, type="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_region_with_chr <- fetchLD(ld, region_with_chr, region_with_chr, types="UNPHASED_R", simplify=F)$UNPHASED_R
 
     expect_equal(
         as.vector(val_region_with_chr),
@@ -70,8 +70,8 @@ for (bits in bits_list) {
     region_small <- "2:10049-10059"
     rsids_small <- paste0("rs", 50:60)
 
-    val_region_small <- fetchLD(ld, region_small, region_small, type="UNPHASED_R", simplify=F)$UNPHASED_R
-    val_rsid_small <- fetchLD(ld, rsids_small, rsids_small, type="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_region_small <- fetchLD(ld, region_small, region_small, types="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_rsid_small <- fetchLD(ld, rsids_small, rsids_small, types="UNPHASED_R", simplify=F)$UNPHASED_R
 
     expect_equal(
         as.vector(val_region_small),
@@ -79,6 +79,30 @@ for (bits in bits_list) {
         tolerance = 1e-10,
         scale = 1,
         info = sprintf("Small region query should match rsID query for %s", prefix)
+    )
+
+    # Test asymmetric region query (different row vs col regions)
+    region_row <- "2:10000-10050"
+    region_col <- "2:10051-10099"
+    rsids_row <- paste0("rs", 1:51)
+    rsids_col <- paste0("rs", 52:100)
+
+    val_region_asym <- fetchLD(ld, region_row, region_col, types="UNPHASED_R", simplify=F)$UNPHASED_R
+    val_rsid_asym <- fetchLD(ld, rsids_row, rsids_col, types="UNPHASED_R", simplify=F)$UNPHASED_R
+
+    expect_equal(
+        as.vector(val_region_asym),
+        as.vector(val_rsid_asym),
+        tolerance = 1e-10,
+        scale = 1,
+        info = sprintf("Asymmetric region query should match rsID query for %s", prefix)
+    )
+
+    # Test out-of-range region (should error)
+    expect_error(
+        fetchLD(ld, "2:99000000-99999999", "2:99000000-99999999", types="UNPHASED_R"),
+        "No matching variants found in specified region",
+        info = sprintf("Out-of-range region should error for %s", prefix)
     )
   }
 }
