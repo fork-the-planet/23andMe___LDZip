@@ -67,7 +67,7 @@
 #' summary(ld)
 #' 
 #' # Fetch a single entry (on-demand decompression)
-#' val <- fetchLD(ld, 10, 10, type="PHASED_R")
+#' val <- fetchLD(ld, 10, 10, types="PHASED_R")
 #'
 #' }
 #'
