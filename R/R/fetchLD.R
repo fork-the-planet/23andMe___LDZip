@@ -13,8 +13,8 @@
 .resolve_variant_input <- function(input, variant_db_file) {
   if (.is_region(input)) {
     region <- .parse_region(input)
-    idx <- get_indices_by_region(variant_db_file, region)
     r <- get_rsids_by_region(variant_db_file, region)
+    idx <- r$idx
     names <- r$rsids
   } else if (is.character(input)) {
     r <- get_indices_by_rsid(variant_db_file, rsids=input)
