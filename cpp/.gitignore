@@ -1,5 +1,6 @@
 bin/
 obj/
+obj_dev/
 obj_debug/
 old/
 tests/output

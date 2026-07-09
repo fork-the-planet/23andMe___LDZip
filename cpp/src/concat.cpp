@@ -9,27 +9,35 @@
 #include <cstdint>
 #include <string>
 #include <stdexcept>
+#include <map>
+#include <cstring>
+#include <zstd.h>
 
 namespace ldzip {
 
 
 void concat_ldzip(const std::vector<std::string> &prefixes,
                         const std::string &out_prefix,
-                        bool overlapping) {
+                        bool naive) {
+
+    if (naive) {
+        LDZipConcatenator::concat_naive(prefixes, out_prefix);
+        return;
+    }
 
     std::vector<std::string> var_files;
     for (const auto& pref : prefixes)
         var_files.push_back(pref + ".vars.txt");
 
-    // Build variant boundary information
-    // If overlapping: parses files and validates overlaps
-    // If non-overlapping: treats chunks as independent
-    OverlapVariantInfo ov = read_overlapping_variant_order(var_files, overlapping);
+    // Default mode: decompress, merge overlaps, recompress (supports all versions)
+    // Build variant boundary information and detect overlaps
+    OverlapVariantInfo ov = read_overlapping_variant_order(var_files);
 
     size_t total_rows = ov.total_variants;
 
     LDZipMatrix in(prefixes[0]);
-    LDZipConcatenator concator(total_rows, total_rows, in.format(), in.stats_available(), in.bitsEnum(), out_prefix);
+    size_t chunk_size = read_metadata_json(prefixes[0] + ".meta.json").chunk_size;
+    LDZipConcatenator concator(total_rows, total_rows, in.format(), in.stats_available(), in.bitsEnum(), out_prefix, chunk_size);
 
     // Process columns chunk by chunk
     for (size_t i = 0; i < prefixes.size(); i++) {
@@ -40,6 +48,7 @@ void concat_ldzip(const std::vector<std::string> &prefixes,
         concator.process_exclusive_columns(in, ov.chunks[i]);
 
         // --- Overlap columns with next chunk ---
+        bool overlapping = (ov.chunks[i].second_overlap_start < ov.chunks[i].n_variants);
         if (overlapping && i + 1 < prefixes.size()) {
             LDZipMatrix next_mat(prefixes[i+1]);
             concator.process_overlap_columns(in, next_mat, ov.chunks[i], ov.chunks[i + 1]);
@@ -50,8 +59,7 @@ void concat_ldzip(const std::vector<std::string> &prefixes,
     concator.close();
 
     // Write merged vars.txt
-    // For overlapping: skip first_overlap_end variants (already written by previous chunk)
-    // For non-overlapping: first_overlap_end=0, so writes all variants
+    // Skip first_overlap_end variants (already written by previous chunk)
     {
         std::string out_vars = out_prefix + ".vars.txt";
         std::ofstream out(out_vars);

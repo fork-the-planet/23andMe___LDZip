@@ -33,7 +33,7 @@ ld = LDZipMatrix(file.path(system.file("extdata", package = "LDZipMatrix"), "g1k
 ---
 ### - `buildIndex()`
 Builds an SQLITE index file for querying variants by position or variant IDs.
-- This step is necessary for using `fetchLD`/`getNeighbors` with variantIDs. 
+- This step is necessary for using `fetchLD`/`getNeighbors` with variant IDs or genomic regions. 
 - Integer indices will always work without building the SQLITE index
 ```
 library(LDZipMatrix)
@@ -43,7 +43,7 @@ buildIndex(ld)
 ---
 ### - `fetchLD(rows, columns)`
 Retrieve entries from a compressed LD matrix by specifying rows and columns.  
-- Supports queries by variant indices or variant IDs.  
+- Supports queries by variant indices, variant IDs, or genomic regions.  
 - See `?fetchLD` for detailed usage and examples.
 ```
 library(LDZipMatrix)
@@ -51,6 +51,7 @@ ld = LDZipMatrix(file.path(system.file("extdata", package = "LDZipMatrix"), "g1k
 fetchLD(ld, 2, 191, type = c("PHASED_R", "DPRIME"))
 buildIndex(ld)
 fetchLD(ld, "rs587755077", "rs587631919", type = "PHASED_R")
+fetchLD(ld, "22:16050000-16051000", "22:16050000-16051000", type = "PHASED_R")
 ```
 ---
 

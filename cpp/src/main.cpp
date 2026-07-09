@@ -18,6 +18,7 @@ int main(int argc, char** argv) {
     ldzip::Stat min_stat;
     int bits = 8;
     float min = 0.01;
+    size_t chunk_columns = 100;  // v3.0: columns per compressed chunk
     static const std::map<std::string, ldzip::Stat> col_map {
         {"PHASED_R",    ldzip::Stat::PHASED_R},
         {"UNPHASED_R",  ldzip::Stat::UNPHASED_R},
@@ -38,38 +39,40 @@ int main(int argc, char** argv) {
     plink_bin->add_option("-o,--output_prefix", output_prefix, "Output prefix")->required();
     plink_bin->add_option("-b,--bits", bits, "Number of bits to quanitze LD values (99 - float)")->check(CLI::IsMember({8, 16, 32, 99}))->default_val(std::to_string(bits));
     plink_bin->add_option("-m,--min", min, "Minimum absolute threshold")->check(CLI::NonNegativeNumber)->default_val(std::to_string(min));
-    plink_bin->add_option("-t,--type", columns, "Type of LD available in binary matrix. ")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1); 
+    plink_bin->add_option("-t,--type", columns, "Type of LD available in binary matrix. ")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1);
+    plink_bin->add_option("--chunk-columns", chunk_columns, "Number of columns per compression chunk")->check(CLI::PositiveNumber)->default_val(std::to_string(chunk_columns)); 
  
     
     plink_tabular->add_option("-l,--ld_file", ld_file, "Input LD file")->required()->check(CLI::ExistingFile);
     plink_tabular->add_option("-s,--snp_file", snp_file, "SNP list file")->required()->check(CLI::ExistingFile);
     plink_tabular->add_option("-o,--output_prefix", output_prefix, "Output prefix")->required();
     plink_tabular->add_option("-b,--bits", bits, "Bits (8,16,32,99)")->check(CLI::IsMember({8, 16, 32, 99}))->default_val(std::to_string(bits));
-    plink_tabular->add_option("-c,--columns", columns, "LD columns to use from plink tabular file (comma separated)")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->delimiter(','); 
-    plink_tabular->add_option("-k,--min_col", min_col, "LD column to apply minimum absolute thresholding")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1); 
+    plink_tabular->add_option("-c,--columns", columns, "LD columns to use from plink tabular file (comma separated)")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->delimiter(',');
+    plink_tabular->add_option("-k,--min_col", min_col, "LD column to apply minimum absolute thresholding")->check(CLI::IsMember(column_names, CLI::ignore_case))->default_val(columns[0])->expected(1);
     plink_tabular->add_option("-m,--min", min, "Minimum absolute threshold")->check(CLI::NonNegativeNumber)->default_val(std::to_string(min));
+    plink_tabular->add_option("--chunk-columns", chunk_columns, "Number of columns per compression chunk")->check(CLI::PositiveNumber)->default_val(std::to_string(chunk_columns));
 
     // Subcommand: filter
     std::string input_prefix;
-    filter->add_option("-i,--input_prefix",     input_prefix,   "Input .ldzip prefix (expects .x.bin, .i.bin, .io.bin, .io.index, .p.bin, .meta.json)")->required();
+    filter->add_option("-i,--input_prefix",     input_prefix,   "Input .ldzip prefix (expects .x.<stat>.bin, .x.<stat>.bin.index, .i.bin, .i.bin.index, .p.bin, .meta.json)")->required();
     filter->add_option("-o,--output_prefix",    output_prefix,  "Output prefix for filtered matrix")->required();
     auto range_opt = filter->add_option("-r,--range", range_str, "Range of indices (0-based START-END)");
     auto keep_opt  = filter->add_option("-k,--keep",  keep_file, "File with list of indices (0-based)");
     range_opt->excludes(keep_opt);
 
     // Subcommand: decompress
-    decompress->add_option("-i,--input_prefix",     input_prefix,   "Input .ldzip prefix (expects .x.bin, .i.bin, .io.bin, .io.index, .p.bin, .meta.json)")->required();
+    decompress->add_option("-i,--input_prefix",     input_prefix,   "Input .ldzip prefix (expects .x.<stat>.bin, .x.<stat>.bin.index, .i.bin, .i.bin.index, .p.bin, .meta.json)")->required();
     decompress->add_option("-t,--type",             type,           "Output Type (tabular or binary)")->default_val(type);
     decompress->add_option("-o,--output_prefix",    output_prefix,  "Output path for decompressed matrix")->required();
 
     // Subcommand: concat
     std::vector<std::string> input_chunks;
     std::string concat_output;
-    bool overlapping = false;
+    bool naive = false;
     auto concat = app.add_subcommand("concat", "Concatenate multiple .ldzip chunks");
     concat->add_option("-i,--inputs", input_chunks, "List of input chunk prefixes")->required()->expected(-1);
     concat->add_option("-o,--output_prefix", concat_output, "Output prefix for concatenated .ldzip")->required();
-    concat->add_flag("--overlapping", overlapping, "Input chunks have overlapping variant regions");
+    concat->add_flag("--naive", naive, "Fast binary concatenation (non-overlapping chunks only)");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -91,13 +94,13 @@ int main(int argc, char** argv) {
         }
 
         if(plink_bin->parsed()){
-            
-            ldzip::compress_binary_matrix(ld_file, snp_file, output_prefix, bits, min, format, stats[0]);
+
+            ldzip::compress_binary_matrix(ld_file, snp_file, output_prefix, bits, min, format, stats[0], chunk_columns);
 
         }else if(plink_tabular->parsed()){
 
-            ldzip::compress_tabular_file(ld_file, snp_file, output_prefix, bits, min, format, min_stat);
-            
+            ldzip::compress_tabular_file(ld_file, snp_file, output_prefix, bits, min, format, min_stat, chunk_columns);
+
         }
     } else if(filter->parsed()) {
         
@@ -139,7 +142,7 @@ int main(int argc, char** argv) {
 
     } else if (concat->parsed()) {
 
-        ldzip::concat_ldzip(input_chunks, concat_output, overlapping);
+        ldzip::concat_ldzip(input_chunks, concat_output, naive);
     }
 
 

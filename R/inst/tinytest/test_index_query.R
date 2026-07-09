@@ -52,7 +52,7 @@ for (bits in bits_list) {
         r <- tc$row
         c <- tc$col
 
-        val_new <- as.vector(fetchLD(ld, r, c, type="PHASED_R", simplify=F)$PHASED_R)
+        val_new <- as.vector(fetchLD(ld, r, c, types="PHASED_R", simplify=F)$PHASED_R)
         val_old <- orig[r, c]
 
         expect_equal(

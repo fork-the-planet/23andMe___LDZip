@@ -43,18 +43,21 @@ for min in "${MIN_LIST[@]}"; do
         --min_col UNPHASED_R > /dev/null
     done
 
-    echo "➤ Concating all together ..."
+    echo "➤ Concating all together (naive mode)..."
     ../bin/ldzip concat \
     --inputs $OUT_DIR/compressed.chr20 $OUT_DIR/compressed.chr21 $OUT_DIR/compressed.chr22 \
-    --output_prefix $OUT_DIR/concat_all > /dev/null
+    --output_prefix $OUT_DIR/concat_all \
+    --naive > /dev/null
 
-    echo "➤ Concating sequentially ..."
+    echo "➤ Concating sequentially (naive mode)..."
     ../bin/ldzip concat \
     --inputs $OUT_DIR/compressed.chr20 $OUT_DIR/compressed.chr21 \
-    --output_prefix $OUT_DIR/concat_1 > /dev/null
+    --output_prefix $OUT_DIR/concat_1 \
+    --naive > /dev/null
     ../bin/ldzip concat \
     --inputs $OUT_DIR/concat_1 $OUT_DIR/compressed.chr22 \
-    --output_prefix $OUT_DIR/concat_sequential > /dev/null
+    --output_prefix $OUT_DIR/concat_sequential \
+    --naive > /dev/null
 
     echo "➤ Decompressing concat_all ..."
     ../bin/ldzip decompress \

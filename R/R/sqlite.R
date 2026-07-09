@@ -67,7 +67,7 @@ get_indices_by_region <- function(db_file, region) {
     region$chrom, region$start, region$end
   )
   res <- DBI::dbGetQuery(con, query)
-  if (nrow(res) == 0) stop('No matching rsIDs found in specified region')
+  if (nrow(res) == 0) stop('No matching variants found in specified region')
 
   sort(res$idx)
 }
@@ -86,7 +86,7 @@ get_rsids_by_region <- function(db_file, region) {
   ", region$chrom, region$start, region$end)
 
   res <- DBI::dbGetQuery(con, sql)
-  if (nrow(res) == 0) stop('No matching rsIDs found in specified region')
+  if (nrow(res) == 0) stop('No matching variants found in specified region')
 
   res$rsid <- join_variant_identifier(res$RSNUM, res$RSLEV)
   res <- res[order(res$idx), ]

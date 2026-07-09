@@ -84,14 +84,13 @@ for min in "${MIN_LIST[@]}"; do
             idx=$((idx+1))
         done
 
-        echo "➤ Concating..."
+        echo "➤ Concating (default mode - overlapping)..."
         ../bin/ldzip concat \
         --inputs \
             $OUT_DIR/compressed.chunk0 \
             $OUT_DIR/compressed.chunk1 \
             $OUT_DIR/compressed.chunk2 \
-        --output_prefix $OUT_DIR/concat \
-        --overlapping > /dev/null
+        --output_prefix $OUT_DIR/concat > /dev/null
 
         echo "➤ Decompressing ..."
         ../bin/ldzip decompress \

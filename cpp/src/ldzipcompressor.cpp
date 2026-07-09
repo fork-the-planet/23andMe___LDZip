@@ -9,18 +9,24 @@ LDZipCompressor::LDZipCompressor(size_t nrows,
                          const std::vector<Stat>& stats,
                          Bits bits,
                          const std::string& prefix,
-                         Mode mode)
-    :   m_(nrows, ncols, format, stats, bits, prefix),
+                         Mode mode,
+                         size_t chunk_size)
+    :   m_(nrows, ncols, format, stats, bits, prefix, chunk_size),
         mode_(mode),
+        chunk_size_(chunk_size),
         diag_vals{1.0f} {
-    
+
+    if (chunk_size_ == 0)
+        throw std::runtime_error("chunk_size must be > 0 for v3.0");
+
     p_stream_.open(m_.pFile(), std::ios::out | std::ios::binary | std::ios::trunc);
-    i_stream_.open(m_.iFile(), std::ios::out | std::ios::binary | std::ios::trunc);
-    for (Stat s : m_.stats_available_) 
-        x_streams_[s].open(m_.xFile(s), std::ios::out | std::ios::binary | std::ios::trunc);
+
+    i_chunked_writer_ = std::make_unique<ChunkedWriter>(m_.iFile(), m_.iIndexFile(), chunk_size_);
+    for (Stat s : m_.stats_available_)
+        x_chunked_writers_[s] = std::make_unique<ChunkedWriter>(m_.xFile(s), m_.xIndexFile(s), chunk_size_);
 
     diag_vals[Stat::D] = std::numeric_limits<float>::quiet_NaN();
-    active_column_ = -1; 
+    active_column_ = -1;
     if(mode == Mode::ColumnStream)
     {
         x_buffer.resize(nrows);
@@ -34,8 +40,9 @@ LDZipCompressor::LDZipCompressor(size_t nrows,
                          Stat stat,
                          Bits bits,
                          const std::string& prefix,
-                         Mode mode)
-    : LDZipCompressor(nrows, ncols, format, std::vector<Stat>{stat}, bits, prefix, mode) {    
+                         Mode mode,
+                         size_t chunk_size)
+    : LDZipCompressor(nrows, ncols, format, std::vector<Stat>{stat}, bits, prefix, mode, chunk_size) {
 }
 
 void LDZipCompressor::push_value(
@@ -72,18 +79,18 @@ void LDZipCompressor::push_column_raw(
                         const std::vector<size_t>& rindices,
                         Stat stat) {
 
-    EnumArray<float, Stat> Statvalues(-999.0f); 
+    EnumArray<float, Stat> Statvalues(-999.0f);
 
     size_t start_r = 0;
     size_t end_r = rindices.size() - 1;
-    if (m_.format_ == MatrixFormat::UPPER) { start_r = cidx; } 
+    if (m_.format_ == MatrixFormat::UPPER) { start_r = cidx; }
 
     for (size_t r = start_r; r <= end_r; ++r){
         size_t row = rindices[r];
         float val = values[r];
         if (std::isnan(val)) {
             throw std::runtime_error("NaN encountered in values despite prior filtering. Genotype data must have missing values");
-        }        
+        }
         Statvalues[stat] = val;
         push_value_(row, cidx, Statvalues);
     }
@@ -97,20 +104,20 @@ void LDZipCompressor::push_column(
                         uint32_t cidx,
                         const std::vector<float>& values,
                         const std::vector<size_t>& keep,
-                        float min, 
+                        float min,
                         Stat stat) {
 
-    EnumArray<float, Stat> Statvalues(-999.0f); 
+    EnumArray<float, Stat> Statvalues(-999.0f);
 
     size_t start_r = 0;
     size_t end_r = m_.nrows_ - 1;
-    if (m_.format_ == MatrixFormat::UPPER) { start_r = cidx; } 
+    if (m_.format_ == MatrixFormat::UPPER) { start_r = cidx; }
 
     for (size_t r = start_r; r <= end_r; ++r){
         size_t row = keep[r];
         float val = values[row];
         if (!std::isnan(val) && std::abs(val) < min) continue;
-        
+
         Statvalues[stat] = val;
         push_value_(r, cidx, Statvalues);
     }
@@ -118,6 +125,28 @@ void LDZipCompressor::push_column(
     writeActiveColumn();
     active_column_++;
 
+}
+
+// Encode x values to byte buffer for chunked writing
+template <typename T>
+std::vector<uint8_t> encode_scaled_buffer(const std::vector<float>& x_col, int64_t scale) {
+    std::vector<T> buf(x_col.size());
+    for (size_t i = 0; i < x_col.size(); ++i) {
+        float v = x_col[i];
+        if (std::is_same<T, float>::value) {
+            buf[i] = v;
+        } else {
+            if (std::isnan(v))
+                buf[i] = std::numeric_limits<T>::min();
+            else{
+                double prod = static_cast<double>(v) * static_cast<double>(scale);
+                buf[i] = static_cast<T>(std::llround(prod));
+            }
+        }
+    }
+    std::vector<uint8_t> result(buf.size() * sizeof(T));
+    std::memcpy(result.data(), buf.data(), result.size());
+    return result;
 }
 
 template <typename T, typename Stream>
@@ -141,7 +170,7 @@ void write_scaled_buffer(Stream& x_out, const std::vector<float>& x_col, int64_t
 }
 
 void LDZipCompressor::writeActiveColumn(){
-    
+
     // Update p_vector before writing out column
     m_.p_[active_column_ + 1] = m_.p_[active_column_] + m_.i_[active_column_].size();
 
@@ -151,45 +180,17 @@ void LDZipCompressor::writeActiveColumn(){
 
 void LDZipCompressor::write_i() {
     std::vector<uint32_t>& i_col = m_.i_[active_column_];
+
     if (!i_col.empty()) {
-        
-        if(m_.version_ == "1.1")
-        {
-            i_stream_.write(
-                reinterpret_cast<const char*>(i_col.data()), static_cast<std::streamsize>(i_col.size() * sizeof(uint32_t))
-            );
-        } else
-        {
-            
-            using T = int16_t;
-            static constexpr T DELTA_SENTINEL = std::numeric_limits<T>::max();
-            // static constexpr T DELTA_SENTINEL = 4;
-
-            std::vector<T> deltas(i_col.size());
-            uint64_t delta = static_cast<int64_t>(active_column_) - static_cast<int64_t>(i_col[0]);
-            if (delta >= DELTA_SENTINEL ) {
-                m_.I_.push(static_cast<uint32_t>(delta));
-                deltas[0] = DELTA_SENTINEL;
-            }else {
-                deltas[0] = static_cast<T>(delta);
-            }
-
-            for (size_t idx = 1; idx < i_col.size(); ++idx) {
-                delta = static_cast<int64_t>(i_col[idx]) - static_cast<int64_t>(i_col[idx - 1]);
-                if (delta >= DELTA_SENTINEL) {
-                    m_.I_.push(static_cast<uint32_t>(delta));
-                    deltas[idx] = DELTA_SENTINEL;
-                }else {
-                    deltas[idx] = static_cast<T>(delta);
-                }
-            }
-
-            i_stream_.write(reinterpret_cast<const char*>(deltas.data()),
-                            static_cast<std::streamsize>(deltas.size() * sizeof(T)));
-
+        // v3.0: Encode as int32_t deltas (first element from diagonal, rest as successive differences)
+        std::vector<int32_t> deltas(i_col.size());
+        deltas[0] = static_cast<int32_t>(i_col[0]) - static_cast<int32_t>(active_column_);
+        for (size_t idx = 1; idx < i_col.size(); ++idx) {
+            deltas[idx] = static_cast<int32_t>(i_col[idx]) - static_cast<int32_t>(i_col[idx - 1]);
         }
+        i_chunked_writer_->appendColumn(deltas.data(), deltas.size() * sizeof(int32_t));
     }
-    m_.I_.flush_column();
+
     i_col.clear();
     i_col.shrink_to_fit();
 }
@@ -197,25 +198,28 @@ void LDZipCompressor::write_i() {
 void LDZipCompressor::write_x(Stat& s){
 
     auto& x_col = m_.xs_[s][active_column_];
-    std::fstream& x_out = x_streams_[s];
     int64_t scale = (1LL << (m_.bits() - 1)) - 1;
 
+    std::vector<uint8_t> encoded_data;
     switch (m_.bits_) {
         case Bits::B8:
-            write_scaled_buffer<int8_t>(x_out, x_col, scale);
+            encoded_data = encode_scaled_buffer<int8_t>(x_col, scale);
             break;
         case Bits::B16:
-            write_scaled_buffer<int16_t>(x_out, x_col, scale);
+            encoded_data = encode_scaled_buffer<int16_t>(x_col, scale);
             break;
         case Bits::B32:
-            write_scaled_buffer<int32_t>(x_out, x_col, scale);
+            encoded_data = encode_scaled_buffer<int32_t>(x_col, scale);
             break;
         case Bits::B99:
-            write_scaled_buffer<float>(x_out, x_col, scale);
+            encoded_data = encode_scaled_buffer<float>(x_col, scale);
             break;
         default:
             throw std::runtime_error("Unsupported bits value");
     }
+
+    if (!encoded_data.empty())
+        x_chunked_writers_[s]->appendColumn(encoded_data.data(), encoded_data.size());
 
     x_col.clear();
     x_col.shrink_to_fit();
@@ -260,8 +264,8 @@ void LDZipCompressor::push_value_(
 void LDZipCompressor::stream_close()
 {
     if(mode_ == Mode::ValueStream)
-    {    
-        if( active_column_ >= 0 ) 
+    {
+        if( active_column_ >= 0 )
             writeActiveColumn();
         active_column_++;
 
@@ -273,11 +277,14 @@ void LDZipCompressor::stream_close()
         }
     }
 
-    write_p();    
-    for (Stat s : m_.stats_available_) 
-        x_streams_[s].close();
-    i_stream_.close();
+    write_p();
     p_stream_.close();
+
+    // Close all chunked writers (v3.0)
+    i_chunked_writer_->close();
+    for (Stat s : m_.stats_available_) {
+        x_chunked_writers_[s]->close();
+    }
 
     write_metadata_json(m_.metaFile(), m_.metaInfo());
 

@@ -1,0 +1,7 @@
+npz_template: '${projectDir}/../../assets/npz/chr{CHR}_{CHUNK}.npz'
+chroms: '10,20'
+npz_ld_type: 'PHASED_R'
+bits: 8
+min: 0.01
+prefix: 'test_npz'
+concat_pairwise: true

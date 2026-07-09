@@ -168,3 +168,17 @@ expect_true(is.matrix(out_unsorted), info = "Should return matrix")
 expect_equal(rownames(out_unsorted), as.character(sort(unsorted_idx)), info = "Row names should be sorted")
 expect_equal(colnames(out_unsorted), as.character(sort(unsorted_idx)), info = "Column names should be sorted")
 
+# --- Region-based queries ---------------------------------------------------
+
+# Same region LD matrix
+result1 <- fetchLD(ld, "22:16050000-16051000", "22:16050000-16051000", types = "PHASED_R")
+expect_true(is.matrix(result1), info = "Same region should return matrix")
+expect_true(nrow(result1) == ncol(result1), info = "Same region should return square matrix")
+
+# Region queries not supported with pairwise=TRUE
+expect_error(
+  fetchLD(ld, "22:16050000-16051000", "22:16050000-16051000", types = "PHASED_R", pairwise = TRUE),
+  "Region queries not supported with pairwise=TRUE",
+  info = "Should error on region with pairwise=TRUE"
+)
+

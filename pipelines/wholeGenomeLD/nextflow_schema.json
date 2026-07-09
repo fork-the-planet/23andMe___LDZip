@@ -8,15 +8,19 @@
         "input_parameters": {
             "title": "Input Parameters",
             "type": "object",
-            "description": "Paths and settings for specifying input genotype data. Provide either pfile_template or vcf_template, not both.",
+            "description": "Paths and settings for specifying input genotype data. Provide either pfile_template, vcf_template, or npz_template, not multiple.",
             "properties": {
                 "pfile_template": {
                     "type": "string",
-                    "description": "template for PLINK2 .pfiles (without extension), using '{CHR}' as a placeholder e.g. '/home/data/g1k.chr{CHR}'. Mutually exclusive with vcf_template."
+                    "description": "template for PLINK2 .pfiles (without extension), using '{CHR}' as a placeholder e.g. '/home/data/g1k.chr{CHR}'. Mutually exclusive with vcf_template and npz_template."
                 },
                 "vcf_template": {
                     "type": "string",
-                    "description": "template for VCF files (with .vcf or .vcf.gz extension), using '{CHR}' as a placeholder e.g. '/home/data/g1k.chr{CHR}'. VCF files will be automatically converted to pgen format. Mutually exclusive with pfile_template."
+                    "description": "template for VCF files (with .vcf or .vcf.gz extension), using '{CHR}' as a placeholder e.g. '/home/data/g1k.chr{CHR}'. VCF files will be automatically converted to pgen format. Mutually exclusive with pfile_template and npz_template."
+                },
+                "npz_template": {
+                    "type": "string",
+                    "description": "template for NPZ LD matrix files (with .npz extension), using '{CHR}' and '{CHUNK}' as placeholders e.g. '/home/data/chr{CHR}_{CHUNK}.npz'. Companion .gz variant files must exist with same basename. Mutually exclusive with pfile_template and vcf_template."
                 },
                 "chroms": {
                     "type": "string",
@@ -66,6 +70,11 @@
                     "description": "Whether to stage intermediate PLINK LD files to outdir",
                     "default": false
                 },
+                "stage_binary": {
+                    "type": "boolean",
+                    "description": "Whether to stage intermediate binary matrix files to outdir (only applicable when using npz_template)",
+                    "default": false
+                },
                 "stage_chunk": {
                     "type": "boolean",
                     "description": "Whether to stage compressed LDZip chunk files to outdir",
@@ -85,8 +94,12 @@
             "properties": {
                 "ld_command": {
                     "type": "string",
-                    "default": "--r-phased ref-based cols=id,ref,alt,dprime",
+                    "default": "--r-unphased ref-based cols=id,ref,alt",
                     "description": "string to be passed to plink2 for LD calculation. All LD statistics output by plink2 will be compressed"
+                },
+                "ld_filter": {
+                    "type": "string",
+                    "description": "variant filtering options to apply before LD calculation (e.g., '--maf 0.0001' for minor allele frequency filtering, '--geno 0.1' for missingness, etc.)"
                 },
                 "ld_threads": {
                     "type": "integer",
@@ -133,8 +146,20 @@
                 },
                 "min_col": {
                     "type": "string",
-                    "default": "PHASED_R",
-                    "description": "column/type on which to apply the min threshold"
+                    "default": "UNPHASED_R",
+                    "enum": ["PHASED_R", "UNPHASED_R", "PHASED_R2", "UNPHASED_R2", "D", "DPRIME"],
+                    "description": "column (LD statistic type) on which to apply the min threshold (only applicable when using pfile_template/vcf_template)"
+                },
+                "npz_ld_type": {
+                    "type": "string",
+                    "default": "UNPHASED_R",
+                    "enum": ["PHASED_R", "UNPHASED_R", "PHASED_R2", "UNPHASED_R2", "D", "DPRIME"],
+                    "description": "LD statistic type to compress from NPZ files (only applicable when using npz_template)"
+                },
+                "concat_pairwise": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "whether to use staggered pairwise concatenation before chromosome concatenation. Required when three or more consecutive chunks have overlapping regions, as ldzip concat cannot handle this case directly."
                 }
             }
         }

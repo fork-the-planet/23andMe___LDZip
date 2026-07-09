@@ -15,8 +15,8 @@ public:
         RowStream
     };
 
-    explicit LDZipCompressor    (size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix, Mode mode);
-    explicit LDZipCompressor    (size_t nrows, size_t ncols, MatrixFormat format, Stat stats, Bits bits, const std::string& prefix, Mode mode);
+    explicit LDZipCompressor    (size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix, Mode mode, size_t chunk_size = 0);
+    explicit LDZipCompressor    (size_t nrows, size_t ncols, MatrixFormat format, Stat stats, Bits bits, const std::string& prefix, Mode mode, size_t chunk_size = 0);
 
     // explicit LDZipCompressor    (LDMatrix& m, Mode mode);
 
@@ -35,12 +35,18 @@ private:
     // --- Private matrix
     LDZipMatrix m_;
 
-    //  --- Private file handlers 
-    std::string file_prefix_{};
+    //  --- Private file handlers
     Mode mode_;
+    size_t chunk_size_{0};
     mutable std::fstream p_stream_;
+
+    // v3.0 chunked compression (always used for writing)
+    std::unique_ptr<ChunkedWriter> i_chunked_writer_;
+    EnumArray<std::unique_ptr<ChunkedWriter>, Stat> x_chunked_writers_;
+
+    // Legacy streams (for concatenator friend access only - not used in v3.0)
     mutable std::fstream i_stream_;
-    mutable EnumArray<std::fstream, Stat> x_streams_;
+    EnumArray<std::fstream, Stat> x_streams_;
 
     // Private compressor helpers
     void push_value_(uint32_t ridx, uint32_t cidx, const EnumArray<float, Stat>& values);

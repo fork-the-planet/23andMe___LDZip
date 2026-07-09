@@ -24,13 +24,18 @@ void filter_ldzip(const std::string &in_prefix,
 
     Stat thisStat = in.stats_available()[0];
 
-    LDZipCompressor compressor(indices.size(), 
-                                indices.size(), 
-                                in.format(), 
-                                in.stats_available(), 
-                                in.bitsEnum(), 
-                                out_prefix, 
-                                LDZipCompressor::Mode::ColumnStream);
+    // Use same chunk_size as input if v3.0, otherwise use default
+    MetaInfo meta = in.metaInfo();
+    size_t chunk_size = (meta.version == "3.0") ? meta.chunk_size : 100;
+
+    LDZipCompressor compressor(indices.size(),
+                                indices.size(),
+                                in.format(),
+                                in.stats_available(),
+                                in.bitsEnum(),
+                                out_prefix,
+                                LDZipCompressor::Mode::ColumnStream,
+                                chunk_size);
 
     std::vector<size_t> new_i(indices.size());
     std::vector<float> new_x(indices.size());
