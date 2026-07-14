@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     openjdk-17-jre-headless \
+    libzstd-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # ---- Install Miniforge (conda-forge) ----
