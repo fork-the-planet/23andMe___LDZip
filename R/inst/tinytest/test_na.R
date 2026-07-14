@@ -16,7 +16,7 @@ test_cases <- replicate(
 )
 
 for (tc in test_cases) {
-  mat <- fetchLD(ld, tc, tc, type="D")
+  mat <- fetchLD(ld, tc, tc, types="D")
 
   expect_true(
     all(is.na(diag(mat))),

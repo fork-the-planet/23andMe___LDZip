@@ -1,5 +1,6 @@
 {
   "bits": 8,
+  "chunk_size": 100,
   "dim": {
     "cols": 4862,
     "rows": 4862
@@ -10,5 +11,5 @@
     "PHASED_R",
     "DPRIME"
   ],
-  "version": "2.1"
+  "version": "3.0"
 }

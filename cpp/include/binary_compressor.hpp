@@ -15,7 +15,8 @@ namespace ldzip {
                                 int bits = 8,
                                 float min = 1e-4,
                                 const std::string& format_str = "full",
-                                const Stat& stat = Stat::PHASED_R){
+                                const Stat& stat = Stat::PHASED_R,
+                                size_t chunk_size = 0){
         if (bits != 8 && bits != 16 && bits != 32 && bits != 99) {
             throw std::runtime_error("Only bit sizes 8, 16, 32, or 99 are supported.");
         }
@@ -52,8 +53,7 @@ namespace ldzip {
         std::cout << " compressing to [" << K << " x " << K << "]\n";
 
         // Step 2: Read each column and compress them
-        // LDZipMatrix ld(K, K, format, stat, parse_bits(bits), output_prefix, true);
-        LDZipCompressor compressor(K, K, format, stat, parse_bits(bits), output_prefix, LDZipCompressor::Mode::ColumnStream);
+        LDZipCompressor compressor(K, K, format, stat, parse_bits(bits), output_prefix, LDZipCompressor::Mode::ColumnStream, chunk_size);
         in.open(binary_path, std::ios::binary);
 
         for (size_t col_pos = 0; col_pos < K; ++col_pos) {

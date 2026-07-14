@@ -3,6 +3,7 @@
 #include "metadata.hpp"
 #include "snp_util.hpp"
 #include "coo.hpp"
+#include "chunked_compression.hpp"
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -15,6 +16,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <algorithm>
+#include <memory>
 static_assert(sizeof(float) == 4,   "float must be 4 bytes");
 static_assert(sizeof(double) == 8,  "double must be 8 bytes");
 
@@ -22,12 +24,12 @@ namespace ldzip {
 
     class LDZipMatrix {
         public:
-            static constexpr const char* DEFAULT_VERSION = "2.1";
+            static constexpr const char* DEFAULT_VERSION = "3.0";
 
             // --- Constructors ---
             LDZipMatrix     ();
-            LDZipMatrix     (size_t nrows, size_t ncols, MatrixFormat format, Stat stat, Bits bits, const std::string& prefix);
-            LDZipMatrix     (size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix);
+            LDZipMatrix     (size_t nrows, size_t ncols, MatrixFormat format, Stat stat, Bits bits, const std::string& prefix, size_t chunk_size = 0);
+            LDZipMatrix     (size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix, size_t chunk_size = 0);
             LDZipMatrix     (const std::string& prefix);
 
             // --- Metadata/Size Access ---
@@ -57,14 +59,17 @@ namespace ldzip {
             // -- File Access ---
             bool            checkFiles()        const;
             bool            checkStatFiles()    const;
+            bool            checkIndexFiles()   const;
             bool            checkOverflowFiles()const;
             std::string     prefix()            const noexcept { return file_prefix_; }
             std::string     metaFile()          const noexcept { return file_prefix_ + fileSuffix(FileType::METADATA); }
             std::string     pFile()             const noexcept { return file_prefix_ + fileSuffix(FileType::P_VECTOR); }
             std::string     iFile()             const noexcept { return file_prefix_ + fileSuffix(FileType::I_VECTOR); }
+            std::string     iIndexFile()        const noexcept { return file_prefix_ + fileSuffix(FileType::I_INDEX); }
             std::string     IFile()             const noexcept { return file_prefix_ + fileSuffix(FileType::I_OVERFLOW_VECTOR); }
             std::string     IIndexFile()        const noexcept { return file_prefix_ + fileSuffix(FileType::I_OVERFLOW_INDEX); }
             std::string     xFile(Stat s)       const noexcept { return file_prefix_ + xSuffix(s); }
+            std::string     xIndexFile(Stat s)  const noexcept { return xFile(s) + ".index"; }
 
             // --- Low Level vector access ---
             const std::vector<uint64_t>&        get_p()                             const;
@@ -129,15 +134,16 @@ namespace ldzip {
             void    writeColumnTabular      (std::ofstream& out, size_t column);
 
             // --- COO stream management for concatenation ---
-            void    close_I()               { I_.close(); }
-            void    reopen_I_append()       { I_.open_append(); }
+            void    close_I()               { if (I_) I_->close(); }
+            void    reopen_I_append()       { if (I_) I_->open_append(); }
 
         private:
 
-            enum class FileType { I_VECTOR, I_OVERFLOW_VECTOR, I_OVERFLOW_INDEX, P_VECTOR, METADATA };
+            enum class FileType { I_VECTOR, I_INDEX, I_OVERFLOW_VECTOR, I_OVERFLOW_INDEX, P_VECTOR, METADATA };
             static constexpr const char* fileSuffix(FileType type) {
                 switch (type) {
                     case FileType::I_VECTOR:            return ".i.bin";
+                    case FileType::I_INDEX:             return ".i.bin.index";
                     case FileType::I_OVERFLOW_VECTOR:   return ".io.bin";
                     case FileType::I_OVERFLOW_INDEX:    return ".io.index";
                     case FileType::P_VECTOR:            return ".p.bin";
@@ -155,23 +161,28 @@ namespace ldzip {
             size_t nrows_{0};
             size_t ncols_{0};
             uint64_t nnz_{0};
+            size_t chunk_size_{0};  // v3.0+: columns per chunk (0 = uncompressed)
             Bits bits_{Bits::B8};
             MatrixFormat format_{MatrixFormat::UPPER};
             mutable EnumArray<bool, Stat> has_stat_{};
             std::vector<Stat> stats_available_{};
             std::vector<Variant> variants_;
 
-            //  --- Private file handlers 
+            //  --- Private file handlers
             std::string file_prefix_{};
             mutable std::fstream p_stream_;
             mutable std::fstream i_stream_;
             mutable EnumArray<std::fstream, Stat> x_streams_;
 
             // --- Private Core vectors
-            COO I_;             // COO style sparse matrix for i_ where Delta(i_) is outside uint16 range 
+            std::unique_ptr<COO> I_;             // COO style sparse matrix for i_ where Delta(i_) is outside uint16 range (v2.1 only)
             mutable std::vector<uint64_t> p_;
             mutable std::vector<std::vector<uint32_t>> i_;
             mutable EnumArray<std::vector<std::vector<float>>, Stat> xs_;
+
+            // --- LRU cache for decompressed chunks (keeps file handles open, caches up to 10 decompressed chunks)
+            mutable std::unique_ptr<ChunkedReader> i_chunked_reader_;
+            mutable EnumArray<std::unique_ptr<ChunkedReader>, Stat> x_chunked_readers_;
 
 
             // --- Friend Class for Compressors            

@@ -53,7 +53,7 @@ for (bits in bits_list) {
         r <- paste("rs",tc$row,sep="") 
         c <- paste("rs",tc$col,sep="")
 
-        val_new <- fetchLD(ld, r, c, type="UNPHASED_R", simplify=F)$UNPHASED_R
+        val_new <- fetchLD(ld, r, c, types="UNPHASED_R", simplify=F)$UNPHASED_R
         val_old <- orig[r, c]
 
         expect_equal(

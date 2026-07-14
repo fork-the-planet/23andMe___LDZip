@@ -1,7 +1,42 @@
+.parse_region <- function(region_str) {
+  pattern <- "^(chr)?([0-9XYM]+):([0-9]+)-([0-9]+)$"
+  m <- regexec(pattern, region_str)
+  matches <- regmatches(region_str, m)[[1]]
+  if (length(matches) == 0) stop("Invalid region format. Expected: chr:start-end (e.g., chr1:10000-20000)")
+  list(chrom = matches[3], start = as.integer(matches[4]), end = as.integer(matches[5]))
+}
+
+.is_region <- function(x) {
+  is.character(x) && length(x) == 1 && grepl("^(chr)?[0-9XYM]+:[0-9]+-[0-9]+$", x)
+}
+
+.resolve_variant_input <- function(input, variant_db_file) {
+  if (.is_region(input)) {
+    region <- .parse_region(input)
+    r <- get_rsids_by_region(variant_db_file, region)
+    idx <- r$idx
+    names <- r$rsids
+  } else if (is.character(input)) {
+    r <- get_indices_by_rsid(variant_db_file, rsids=input)
+    idx <- r$idx
+    names <- r$rsid
+  } else {
+    idx <- input
+    names <- input
+  }
+  list(idx = idx, names = names)
+}
+
 .check_fetchLD_inputs <- function(row, col, pairwise) {
 
   if (!length(row) || !length(col))
     stop("`row` and `col` must be non-empty")
+
+  is_row_region <- .is_region(row)
+  is_col_region <- .is_region(col)
+
+  if (pairwise && (is_row_region || is_col_region))
+    stop("Region queries not supported with pairwise=TRUE")
 
 	if (is.numeric(row) != is.numeric(col))
   	stop("`row` and `col` must be of the same type (both numeric or both character)")
@@ -33,8 +68,9 @@
 #'
 #' @param ld An external pointer to an \code{LDZipMatrix} object,
 #'   typically created with \code{LDZipMatrix()}.
-#' @param row,col An Integer (1-based) or character scalar/vector of variant indices/IDs
-#'   specifying the row(s)/column(s) to query.
+#' @param row,col An Integer (1-based), character scalar/vector of variant indices/IDs,
+#'   or genomic region string (e.g., "chr1:10000-20000", "22:16050000-16051000").
+#'   Genomic regions are inclusive on both start and end positions.
 #' @param types a character scalar/vector of types of linkage statistics to 
 #'   return. Choices are \code{"PHASED_R"}, \code{"UNPHASED_R"}, \code{"PHASED_R2"}, \code{"UNPHASED_R2"}, \code{"D"}, \code{"DPRIME"}.
 #' @param pairwise Logical flag controlling the return type:
@@ -77,7 +113,7 @@
 #'
 #' @note
 #' \itemize{
-#'   \item In order to use variant identifiers (instead of indices), please index the \code{LDZipMatrix} object using \code{buildIndex(ld)}
+#'   \item In order to use variant identifiers or genomic regions (instead of indices), please index the \code{LDZipMatrix} object using \code{buildIndex(ld)}
 #'   \item When \code{pairwise=FALSE}: Variants in the returned object are sorted in order of their variant indices, and not the same order as the input in \code{row} or \code{col}
 #'   \item When \code{pairwise=TRUE}: Results are returned in the same order as the input. Duplicate pairs are allowed.
 #' }
@@ -127,6 +163,10 @@
 #' # N x N query, multiple statistics → list of matrices
 #' fetchLD(ld, vars, vars, types = c("PHASED_R", "DPRIME"))
 #'
+#' ## Region-based queries
+#' # Same region LD matrix
+#' fetchLD(ld, "22:16050000-16051000", "22:16050000-16051000")
+#'
 #' ## Pairwise queries (always returns data.frame)
 #' # Fetch LD for specific pairs (row[i] with col[i])
 #' rows <- c(1, 5, 10)
@@ -149,14 +189,15 @@ fetchLD <- function(ld, row, col, types=c("UNPHASED_R"), pairwise=FALSE, simplif
 	rowNames = row
 	colNames = col
 
-	if (is.character(row) || is.character(col)) {
-		variant_db_file <- paste(LDZipMatrix_get_prefix_rcpp(ld), "sqlite", sep=".")
-		if (is.character(row)) { r <- get_indices_by_rsid(variant_db_file, rsids=row); row_idx <- r$idx; rowNames <- r$rsid } else { row_idx <- row }
-		if (is.character(col)) { c <- get_indices_by_rsid(variant_db_file, rsids=col); col_idx <- c$idx; colNames <- c$rsid } else { col_idx <- col }
-	} else {
-		row_idx <- row
-		col_idx <- col
-	}
+	variant_db_file <- paste(LDZipMatrix_get_prefix_rcpp(ld), "sqlite", sep=".")
+
+	row_resolved <- .resolve_variant_input(row, variant_db_file)
+	col_resolved <- .resolve_variant_input(col, variant_db_file)
+
+	row_idx <- row_resolved$idx
+	col_idx <- col_resolved$idx
+	rowNames <- row_resolved$names
+	colNames <- col_resolved$names
 
 	# Sort or validate based on mode
 	if (!pairwise) {

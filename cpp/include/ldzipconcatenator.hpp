@@ -22,16 +22,18 @@ struct OverlapVariantInfo {
 };
 
 // Builds variant boundary information for concatenation
-// If overlapping=true: Reads variant files and validates overlaps match exactly
-// If overlapping=false: Constructs non-overlapping boundaries (treats chunks as independent)
-OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files, bool overlapping);
+// Reads variant files and validates overlaps match exactly
+OverlapVariantInfo read_overlapping_variant_order(const std::vector<std::string>& var_files);
 
 class LDZipConcatenator {
 public:
-    LDZipConcatenator(size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix);
+    LDZipConcatenator(size_t nrows, size_t ncols, MatrixFormat format, const std::vector<Stat>& stats, Bits bits, const std::string& prefix, size_t chunk_size);
     void process_overlap_columns(const LDZipMatrix& current_mat, const LDZipMatrix& next_mat, const ChunkBoundary& current_chunk, const ChunkBoundary& next_chunk);
     void process_exclusive_columns(const LDZipMatrix& current_mat, const ChunkBoundary& current_chunk);
     void close();
+
+    // Fast binary concatenation for non-overlapping v3.0 chunks
+    static void concat_naive(const std::vector<std::string>& prefixes, const std::string& out_prefix);
 
 private:
     // Compressor used for merging overlapping regions
@@ -44,21 +46,15 @@ private:
     void push_decoded_column(uint32_t cidx);
     void writeMergedColumn();
 
-    // Helper functions for bulk file copying
-    template <typename T>
-    void copy_binary_file_with_offset(const std::string& in_file, std::fstream& out_stream, std::streamoff read_pos, T add_value, size_t byte_size, size_t n, size_t chunk_size = 1000000);
-
-    template <typename T>
-    void copy_binary_file_with_offset_file(const std::string& in_file, const std::string& out_file, std::streamoff read_pos, T add_value, size_t byte_size, size_t n, size_t chunk_size = 1000000);
-
-    std::pair<uint64_t, uint64_t> get_I_range(const std::string& index_file, size_t a, size_t b);
-
     // Helper to clear merge buffers
     void clear_merge_buffers(const LDZipMatrix& mat);
 
     // Helper to extract filtered column data into above/below buffers
     void extract_above_column(const LDZipMatrix& mat, uint32_t local_col, uint32_t threshold, uint32_t global_offset);
     void extract_below_column(const LDZipMatrix& mat, uint32_t local_col, uint32_t threshold, uint32_t global_offset);
+
+    // Helper to extract full column directly into merged buffers
+    void extract_full_column(const LDZipMatrix& mat, uint32_t local_col, uint32_t global_offset);
 
     // Helper to merge above and below buffers into merged buffers
     void merge_above_below_buffers(const LDZipMatrix& mat);
@@ -69,9 +65,6 @@ private:
 
     // Track total nnz internally as we process chunks
     uint64_t current_nnz_ = 0;
-
-    // Track total COO entries as we process chunks
-    uint64_t current_I_offset_ = 0;
 };
 
 } // namespace ldzip

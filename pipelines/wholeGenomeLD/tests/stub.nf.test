@@ -5,11 +5,26 @@ nextflow_pipeline {
     script "main.nf"
     options "-stub"
 
-    test("Should run without failures") {
+    test("Should run without failures - PLINK") {
 
         when {
             params {
                 load("$projectDir/tests/yaml/stub.yaml")
+                outdir = "$projectDir/.nf-test"
+            }
+        }
+
+        then {
+            assert workflow.success
+        }
+
+    }
+
+    test("Should run without failures - NPZ") {
+
+        when {
+            params {
+                load("$projectDir/tests/yaml/stub.npz.yaml")
                 outdir = "$projectDir/.nf-test"
             }
         }

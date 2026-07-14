@@ -26,15 +26,16 @@ LDZipMatrix::LDZipMatrix(size_t nrows,
                          MatrixFormat format,
                          const std::vector<Stat>& stats,
                          Bits bits,
-                         const std::string& prefix)
-    : version_(DEFAULT_VERSION),
+                         const std::string& prefix,
+                         size_t chunk_size)
+    : version_("3.0"),
       nrows_(nrows),
       ncols_(ncols),
       nnz_(0),
+      chunk_size_(chunk_size),
       bits_(bits),
       format_(format),
-      file_prefix_(prefix),
-      I_(IFile().c_str(), IIndexFile().c_str(), 'w'){
+      file_prefix_(prefix) {
 
     for (Stat s : stats) {
         has_stat_[s] = true;
@@ -52,13 +53,13 @@ LDZipMatrix::LDZipMatrix(size_t nrows,
                          MatrixFormat format,
                          Stat stat,
                          Bits bits,
-                         const std::string& prefix)
-    : LDZipMatrix(nrows, ncols, format, std::vector<Stat>{stat}, bits, prefix) {    
+                         const std::string& prefix,
+                         size_t chunk_size)
+    : LDZipMatrix(nrows, ncols, format, std::vector<Stat>{stat}, bits, prefix, chunk_size) {
 }
 
 
-LDZipMatrix::LDZipMatrix(const std::string& prefix) :   file_prefix_(prefix),
-                                                        I_(IFile().c_str(), IIndexFile().c_str(), 'r') {
+LDZipMatrix::LDZipMatrix(const std::string& prefix) :   file_prefix_(prefix) {
     checkFiles();
 
     MetaInfo meta = read_metadata_json(file_prefix_ + fileSuffix(FileType::METADATA));
@@ -69,11 +70,29 @@ LDZipMatrix::LDZipMatrix(const std::string& prefix) :   file_prefix_(prefix),
     nnz_ = meta.nnz;
     has_stat_ = meta.has_stat;
     version_ = meta.version;
+    chunk_size_ = meta.chunk_size;
+
+    // v3.0: Initialize chunked readers
+    if (version_ == "3.0" && chunk_size_ > 0) {
+        i_chunked_reader_ = std::make_unique<ChunkedReader>(iFile(), iIndexFile(), chunk_size_);
+
+        for (Stat s : All_Stats()) if (has_stat_[s]) {stats_available_.push_back(s); x_chunked_readers_[s] = std::make_unique<ChunkedReader>(xFile(s), xIndexFile(s), chunk_size_);}
+    } else {
+        // v1.1 or v2.1: Open traditional streams
+        i_stream_.open(iFile(), std::ios::in | std::ios::binary);
+        for (Stat s : All_Stats()) if (has_stat_[s]) {stats_available_.push_back(s); x_streams_[s].open(xFile(s), std::ios::in | std::ios::binary);}
+    }
+
+    checkIndexFiles();
     checkOverflowFiles();
+
+    // Open COO overflow file for v2.1
+    if (version_ == "2.1") {
+        I_ = std::make_unique<COO>(IFile().c_str(), IIndexFile().c_str(), 'r');
+    }
+
     checkStatFiles();
     p_stream_.open(pFile(), std::ios::in | std::ios::binary);
-    i_stream_.open(iFile(), std::ios::in | std::ios::binary);
-    for (Stat s : All_Stats()) if (has_stat_[s]) {stats_available_.push_back(s); x_streams_[s].open(xFile(s), std::ios::in | std::ios::binary);}
 }
 
 
@@ -88,8 +107,23 @@ bool LDZipMatrix::checkFiles() const {
     return true;
 }
 
+bool LDZipMatrix::checkIndexFiles() const {
+    // Only v3.0 uses index files
+    if (version_ == "3.0") {
+        if (!std::filesystem::exists(iIndexFile())) {
+            throw std::runtime_error("LDZipMatrix:: Missing file: " + iIndexFile());
+        }
+        for (Stat s : stats_available_) {
+            if (!std::filesystem::exists(xIndexFile(s))) {
+                throw std::runtime_error("LDZipMatrix:: Missing file: " + xIndexFile(s));
+            }
+        }
+    }
+    return true;
+}
+
 bool LDZipMatrix::checkOverflowFiles() const {
-    if (version_ != "1.1") {
+    if (version_ == "2.1") {
         std::string bin_path = file_prefix_ +
                                fileSuffix(FileType::I_OVERFLOW_VECTOR);
         std::string index_path = file_prefix_ +
@@ -142,28 +176,53 @@ std::vector<uint32_t> LDZipMatrix::get_i(uint32_t column) const {
     std::vector<uint32_t> i_buf(nnz_column);
     if (nnz_column == 0) return i_buf;
 
-    i_stream_.clear();
+    if (version_ == "3.0" && chunk_size_ > 0) {
+        // v3.0: Read from compressed chunks (int32_t deltas)
 
-    if (version_ == "1.1") {
+        // 1. Determine which chunk contains this column (using index, ignoring metadata chunk_size)
+        size_t chunk_id = i_chunked_reader_->getChunkForColumn(column);
+
+        // 2. Read and decompress the entire chunk (cached by ChunkedReader)
+        const std::vector<uint8_t>& chunk_data = i_chunked_reader_->readChunk(chunk_id);
+
+        // 3. Calculate byte offset of this column within decompressed chunk
+        uint64_t chunk_start_col = i_chunked_reader_->getChunkStartColumn(chunk_id);
+        uint64_t chunk_start_offset = get_p(chunk_start_col);
+        uint64_t column_offset_in_chunk = start - chunk_start_offset;
+
+        // 4. Decode deltas from decompressed buffer
+        const int32_t* deltas = reinterpret_cast<const int32_t*>(chunk_data.data() + column_offset_in_chunk * sizeof(int32_t));
+
+        // First element is delta from diagonal
+        i_buf[0] = column + deltas[0];
+        // Subsequent elements are successive differences
+        for (size_t idx = 1; idx < nnz_column; ++idx) {
+            i_buf[idx] = i_buf[idx - 1] + deltas[idx];
+        }
+
+    } else if (version_ == "1.1") {
+        // v1.1: Raw uint32_t indices
+        i_stream_.clear();
         i_stream_.seekg(start * sizeof(uint32_t), std::ios::beg);
         i_stream_.read(reinterpret_cast<char*>(i_buf.data()), nnz_column * sizeof(uint32_t));
         if (!i_stream_) throw std::runtime_error("Error reading i file: " + iFile());
+
     } else {
+        // v2.1: Delta-encoded int16_t with overflow handling
+        i_stream_.clear();
 
         using T = int16_t;
         static constexpr T DELTA_SENTINEL = std::numeric_limits<T>::max();
-        // static constexpr T DELTA_SENTINEL = 4;
         std::vector<T> deltas(nnz_column);
 
         i_stream_.seekg(start * sizeof(T), std::ios::beg);
         i_stream_.read(reinterpret_cast<char*>(deltas.data()), nnz_column * sizeof(T));
         if (!i_stream_) throw std::runtime_error("Error reading delta stream");
-        I_.load_column(column);
+        I_->load_column(column);
 
         uint64_t delta;
         if (deltas[0] == DELTA_SENTINEL) {
-            // overflow → fetch true delta from COO
-            delta = I_.pop();
+            delta = I_->pop();
         } else {
             delta = static_cast<uint64_t>(deltas[0]);
         }
@@ -171,7 +230,7 @@ std::vector<uint32_t> LDZipMatrix::get_i(uint32_t column) const {
 
         for (size_t idx = 1; idx < nnz_column; ++idx) {
             if (deltas[idx] == DELTA_SENTINEL) {
-                delta = I_.pop();
+                delta = I_->pop();
             } else {
                 delta = static_cast<uint64_t>(deltas[idx]);
             }
@@ -194,42 +253,94 @@ void read_and_scale(std::istream& in, std::vector<float>& vals, size_t nnz, int6
                     : static_cast<float>(raw[k]) / scale;
 }
 
+template <typename T>
+void decode_scaled_buffer(const uint8_t* src, std::vector<float>& vals, size_t nnz, int64_t scale) {
+    const T* raw = reinterpret_cast<const T*>(src);
+    constexpr T NA_SENTINEL = std::numeric_limits<T>::min();
+    for (size_t k = 0; k < nnz; ++k) {
+        vals[k] = (raw[k] == NA_SENTINEL)
+                    ? std::numeric_limits<float>::quiet_NaN()
+                    : static_cast<float>(raw[k]) / scale;
+    }
+}
+
 std::vector<float> LDZipMatrix::get_x(uint32_t column, Stat stat) const {
     if (!has_stat_[stat])
         throw std::invalid_argument(" Stats Type [" + stat_to_string(stat) + "] not available");
 
-    const auto& p = get_p(); 
+    const auto& p = get_p();
     uint64_t nnz = p[column + 1] - p[column];
     std::vector<float> x_buf(nnz);
 
-    std::fstream& x_stream = x_streams_[stat];
-    x_stream.clear();    
-    if(bits_==Bits::B99)    
-    {
-        x_stream.seekg(p[column] * sizeof(float), std::ios::beg);
-        x_stream.read(reinterpret_cast<char*>(x_buf.data()), nnz * sizeof(float));
-    }
-    else
-    {
+    // v3.0: Read from chunked compressed file
+    if (version_ == "3.0" && chunk_size_ > 0) {
+        size_t chunk_id = x_chunked_readers_[stat]->getChunkForColumn(column);
+        const auto& chunk_data = x_chunked_readers_[stat]->readChunk(chunk_id);
+
         size_t bytes_per_val;
-        switch (bits_) {
-            case Bits::B8:  bytes_per_val = sizeof(int8_t);  break;
-            case Bits::B16: bytes_per_val = sizeof(int16_t); break;
-            case Bits::B32: bytes_per_val = sizeof(int32_t); break;
-            default: throw std::runtime_error("Unsupported bits value");
+        if (bits_ == Bits::B99) {
+            bytes_per_val = sizeof(float);
+        } else {
+            switch (bits_) {
+                case Bits::B8:  bytes_per_val = sizeof(int8_t);  break;
+                case Bits::B16: bytes_per_val = sizeof(int16_t); break;
+                case Bits::B32: bytes_per_val = sizeof(int32_t); break;
+                default: throw std::runtime_error("Unsupported bits value");
+            }
         }
 
-        x_stream.seekg(p[column] * bytes_per_val, std::ios::beg);
-        int64_t scale = (1LL << (bits_to_int(bits_) - 1)) - 1;
-        switch (bits_) {
-            case Bits::B8:  read_and_scale<int8_t>(x_stream, x_buf, nnz, scale);  break;
-            case Bits::B16: read_and_scale<int16_t>(x_stream, x_buf, nnz, scale); break;
-            case Bits::B32: read_and_scale<int32_t>(x_stream, x_buf, nnz, scale); break;
-            default: throw std::runtime_error("Unsupported bits value");
-        }
+        // Calculate offset within the chunk
+        uint64_t chunk_start_col = x_chunked_readers_[stat]->getChunkStartColumn(chunk_id);
+        uint64_t chunk_start_offset = p[chunk_start_col];
+        uint64_t column_offset_in_chunk = p[column] - chunk_start_offset;
+        size_t byte_offset = column_offset_in_chunk * bytes_per_val;
 
+        // Decode from chunk data
+        if (bits_ == Bits::B99) {
+            std::memcpy(x_buf.data(), chunk_data.data() + byte_offset, nnz * sizeof(float));
+        } else {
+            int64_t scale = (1LL << (bits_to_int(bits_) - 1)) - 1;
+            const uint8_t* src = chunk_data.data() + byte_offset;
+
+            switch (bits_) {
+                case Bits::B8:  decode_scaled_buffer<int8_t>(src, x_buf, nnz, scale);  break;
+                case Bits::B16: decode_scaled_buffer<int16_t>(src, x_buf, nnz, scale); break;
+                case Bits::B32: decode_scaled_buffer<int32_t>(src, x_buf, nnz, scale); break;
+                default: throw std::runtime_error("Unsupported bits value");
+            }
+        }
+    } else {
+        // v1.1 or v2.1: Read from traditional stream
+        std::fstream& x_stream = x_streams_[stat];
+        x_stream.clear();
+        if(bits_==Bits::B99)
+        {
+            x_stream.seekg(p[column] * sizeof(float), std::ios::beg);
+            x_stream.read(reinterpret_cast<char*>(x_buf.data()), nnz * sizeof(float));
+        }
+        else
+        {
+            size_t bytes_per_val;
+            switch (bits_) {
+                case Bits::B8:  bytes_per_val = sizeof(int8_t);  break;
+                case Bits::B16: bytes_per_val = sizeof(int16_t); break;
+                case Bits::B32: bytes_per_val = sizeof(int32_t); break;
+                default: throw std::runtime_error("Unsupported bits value");
+            }
+
+            x_stream.seekg(p[column] * bytes_per_val, std::ios::beg);
+            int64_t scale = (1LL << (bits_to_int(bits_) - 1)) - 1;
+            switch (bits_) {
+                case Bits::B8:  read_and_scale<int8_t>(x_stream, x_buf, nnz, scale);  break;
+                case Bits::B16: read_and_scale<int16_t>(x_stream, x_buf, nnz, scale); break;
+                case Bits::B32: read_and_scale<int32_t>(x_stream, x_buf, nnz, scale); break;
+                default: throw std::runtime_error("Unsupported bits value");
+            }
+
+        }
+        if (!x_stream) throw std::runtime_error("Error reading x file: " + xFile(stat));
     }
-    if (!x_stream) throw std::runtime_error("Error reading x file: " + xFile(stat));
+
     return x_buf;
 }
 
@@ -514,7 +625,7 @@ void LDZipMatrix::readVariants(const std::string& snp_file) {
 
 MetaInfo LDZipMatrix::metaInfo() const{
 
-    MetaInfo meta(nrows_, ncols_, nnz_, bits(), format_, version_);
+    MetaInfo meta(nrows_, ncols_, nnz_, bits(), format_, version_, chunk_size_);
     for (Stat s : stats_available_) meta.has_stat[s] = true;
     return meta;
 }

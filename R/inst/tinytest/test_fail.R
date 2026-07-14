@@ -80,7 +80,7 @@ expect_error(
 ## missing rsids
 ## -----------------------------
 expect_error(
-  fetchLD(ld, c("rs587755077", "rsFAKE123"), "rs587631919", type="PHASED_R"),
+  fetchLD(ld, c("rs587755077", "rsFAKE123"), "rs587631919", types="PHASED_R"),
   "Missing",
   info = "missing rsid in row"
 )
