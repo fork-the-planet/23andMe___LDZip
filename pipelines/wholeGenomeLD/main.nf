@@ -156,7 +156,7 @@ process compressLD {
 
 process convertNpzToBinary {
     tag { "chr${chr}-chunk${chunk_id}" }
-    memory { 16.GB * task.attempt }
+    memory { System.getenv('CONSTRAIN_MEMORY') ? 8.GB : 16.GB * task.attempt }
     publishDir "${params.outdir}/logs/${task.process}/", mode: 'copy', pattern: ".command.log", overwrite: true, saveAs: {"${task.tag}.log"}
     publishDir "${params.outdir}/plinkLD/", mode: 'link', overwrite: true, pattern: "plink.chr${chr}_${chunk_id}.*", enabled: params.stage_binary
 
@@ -265,7 +265,7 @@ process concatGenome {
 
 process indexVariants {
     tag "sqlite"
-    memory { 8.GB * (4 ** (task.attempt - 1)) }
+    memory { System.getenv('CONSTRAIN_MEMORY') ? 8.GB : 8.GB * (4 ** (task.attempt - 1)) }
     publishDir "${params.outdir}/whole_genome/", pattern: "*.sqlite", mode: 'link', overwrite: true, saveAs: { filename -> filename.replace('concat', params.prefix) }
     publishDir "${params.outdir}/logs/${task.process}/", mode: 'copy', pattern: ".command.log", overwrite: true, saveAs: {"${task.tag}.log"}
 
