@@ -21,6 +21,7 @@ concurrency:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: false  # Disabled - set to true to re-enable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
