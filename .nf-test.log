@@ -1,0 +1,3 @@
+Jul-15 21:22:33.146 [main] INFO  com.askimed.nf.test.App - nf-test 0.9.5
+Jul-15 21:22:33.164 [main] INFO  com.askimed.nf.test.App - Arguments: [version]
+Jul-15 21:22:34.068 [main] INFO  com.askimed.nf.test.App - Nextflow Version: 26.04.6
