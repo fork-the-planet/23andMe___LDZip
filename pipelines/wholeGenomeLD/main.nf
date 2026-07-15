@@ -1,10 +1,8 @@
 #! /usr/bin/env nextflow
 
 nextflow.enable.dsl=2
-include { validateParameters; paramsSummaryLog } from 'plugin/nf-schema'
-validateParameters()
 
-CHROMS = params.chroms.tokenize(',')*.trim()
+def CHROMS = params.chroms.tokenize(',')*.trim()
 
 process getChromosomeBounds {
     tag { "chr${chr}" }
@@ -491,4 +489,3 @@ workflow.onComplete = {
 workflow.onError = {
     println "Oops .. something went wrong"
 }
-
