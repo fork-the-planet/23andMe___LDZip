@@ -131,3 +131,19 @@ jobs:
         shell: bash
         working-directory: pipelines/wholeGenomeLD
         run: make test
+
+      - name: Debug nf-test cleanup failure
+        if: always()
+        working-directory: pipelines/wholeGenomeLD
+        run: |
+          echo "Current user:"
+          id
+
+          echo "Directory ownership:"
+          ls -ld .nf-test || true
+
+          echo "Files owned by another user:"
+          find .nf-test ! -user "$(id -u)" -ls 2>/dev/null | head -100 || true
+
+          echo "Unusual permissions:"
+          find .nf-test \( ! -readable -o ! -writable \) -ls 2>/dev/null | head -100 || true

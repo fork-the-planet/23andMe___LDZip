@@ -1,4 +1,4 @@
-
+export NXF_SYNTAX_PARSER=v1
 
 test:
 	nf-test clean
