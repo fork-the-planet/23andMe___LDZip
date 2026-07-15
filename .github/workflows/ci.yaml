@@ -127,9 +127,9 @@ jobs:
         working-directory: R
         run: make install
 
-      - name: Install numpy (for NPZ tests)
+      - name: Install Python dependencies (for NPZ tests)
         shell: bash
-        run: pip install numpy
+        run: pip install numpy scipy
 
       - name: Run pipeline tests (nf-test)
         shell: bash
