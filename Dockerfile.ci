@@ -44,6 +44,8 @@ RUN mamba create -y -n ci-env -c conda-forge -c bioconda \
       r-rcpp \
       r-dbi \
       r-rsqlite \
+      numpy \
+      scipy \
  && conda clean -a -y
 
 ENV CONDA_DEFAULT_ENV=ci-env
@@ -56,5 +58,6 @@ RUN nextflow -version
 RUN nf-test version || nf-test --help >/dev/null
 
 RUN Rscript -e "library(argparse); library(jsonlite); library(Matrix); library(tinytest); library(Rcpp); library(DBI); library(RSQLite); cat('R deps OK\n')"
+RUN python3 -c "import numpy; import scipy; print('Python deps OK')"
 
 WORKDIR /work
