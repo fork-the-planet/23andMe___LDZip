@@ -1,7 +1,8 @@
 #! /usr/bin/env nextflow
 
 nextflow.enable.dsl=2
-
+include { validateParameters; paramsSummaryLog } from 'plugin/nf-schema'
+validateParameters()
 def CHROMS = params.chroms.tokenize(',')*.trim()
 
 process getChromosomeBounds {

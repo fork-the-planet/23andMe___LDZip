@@ -48,11 +48,16 @@ RUN mamba create -y -n ci-env -c conda-forge -c bioconda \
 
 ENV CONDA_DEFAULT_ENV=ci-env
 ENV PATH="${CONDA_DIR}/envs/ci-env/bin:${PATH}"
+ENV NXF_HOME=/opt/nextflow
+
+RUN mkdir -p "${NXF_HOME}" \
+ && nextflow plugin install nf-schema@2.3.0
 
 # ---- Sanity checks ----
 RUN plink2 --version
 RUN Rscript --version
 RUN nextflow -version
+RUN nextflow plugin list | grep -E 'nf-schema\\s+2\\.3\\.0'
 RUN nf-test version || nf-test --help >/dev/null
 
 RUN Rscript -e "library(argparse); library(jsonlite); library(Matrix); library(tinytest); library(Rcpp); library(DBI); library(RSQLite); cat('R deps OK\n')"
