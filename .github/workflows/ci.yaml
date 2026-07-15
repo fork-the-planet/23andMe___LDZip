@@ -127,10 +127,6 @@ jobs:
         working-directory: R
         run: make install
 
-      - name: Install Python dependencies (for NPZ tests)
-        shell: bash
-        run: pip install numpy scipy
-
       - name: Run pipeline tests (nf-test)
         shell: bash
         working-directory: pipelines/wholeGenomeLD
